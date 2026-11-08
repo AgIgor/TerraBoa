@@ -1,0 +1,238 @@
+// O que cada ferramenta faz num tile. Retorna { ok, msg, kind, open } ou null.
+import {
+  G, O, CROPS, TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, REGADOR_MAX, TROUGH_MAX, FEEDER_MAX,
+  FEED_VALUE, ANIMALS, LASSO_REACH,
+} from './config.js';
+import { hourOf, sleep } from './game.js';
+import { animalLabel, settleAnimal, isAdult, startFlee } from './animals.js';
+
+const say = (msg, kind = 'info', extra = {}) => ({ ok: kind !== 'bad', msg, kind, ...extra });
+
+export function animalAt(g, px, py, radius = 0.7) {
+  let best = null, bd = radius;
+  for (const a of g.animals) {
+    const d = Math.hypot(a.x - px, a.y - py);
+    if (d < bd) { bd = d; best = a; }
+  }
+  return best;
+}
+
+export function ledAnimal(g) { return g.player.led != null ? g.animals.find(a => a.id === g.player.led) : null; }
+
+function hasAnimalOn(g, x, y) { return g.animals.some(a => Math.floor(a.x) === x && Math.floor(a.y) === y); }
+
+function addItem(g, id, n) { g.inv[id] = (g.inv[id] || 0) + n; }
+
+export function useTool(g, toolId, x, y, px = x + 0.5, py = y + 0.5) {
+  const w = g.world;
+  if (!w.inside(x, y)) return null;
+  switch (toolId) {
+    case 'mao': return hand(g, x, y, px, py);
+    case 'enxada': return hoe(g, x, y);
+    case 'machado': return axe(g, x, y);
+    case 'regador': return water(g, x, y);
+    case 'plantar': return plant(g, x, y);
+    case 'construir': return build(g, x, y);
+    case 'laco': return lasso(g, x, y, px, py);
+    case 'adubo': return fertilize(g, x, y);
+  }
+  return null;
+}
+
+function hand(g, x, y, px, py) {
+  const w = g.world, i = w.idx(x, y), p = g.player;
+  const o = w.obj[i];
+  if (o === O.HOUSE) {
+    const h = hourOf(g);
+    if (h >= 19 || h < 5) { sleep(g); return say('Você dormiu. Bom dia!', 'good', { slept: true }); }
+    return say('Ainda é cedo para dormir (depois das 19h).');
+  }
+  if (o === O.COOP) return say('Cooperativa', 'info', { open: 'market' });
+
+  // ovos no chão
+  const e = w.drops.findIndex(d => d.x === x && d.y === y);
+  if (e >= 0) { const n = w.drops[e].n; w.drops.splice(e, 1); addItem(g, 'ovos', n); return say(`+${n} ovos`, 'good'); }
+
+  // animal: ordenhar ou ver
+  const a = animalAt(g, px, py, 0.8);
+  if (a) {
+    if (a.owned && a.sp === 'gado' && a.sex === 'f' && isAdult(a)) {
+      const l = Math.floor(a.milk);
+      if (l >= 1) { a.milk -= l; addItem(g, 'leite', l); return say(`Ordenhou ${l} L de leite`, 'good'); }
+      return say('A vaca já foi ordenhada. Volte amanhã.');
+    }
+    return say(`${animalLabel(a)}${a.owned ? '' : ' (solto)'}`, 'info', { inspect: a });
+  }
+
+  // cocho: põe ração ou milho
+  if (o === O.FEEDER) {
+    const f = w.feeders.get(i);
+    const room = Math.floor((FEEDER_MAX - f.food) / FEED_VALUE);
+    if (room <= 0) return say('O cocho está cheio.');
+    const src = (g.inv.racao || 0) > 0 ? 'racao' : (g.inv.milho || 0) > 0 ? 'milho' : null;
+    if (!src) return say('Sem ração nem milho para pôr no cocho. Compre na cooperativa.', 'bad');
+    const n = Math.min(room, g.inv[src], 5);
+    g.inv[src] -= n; f.food += n * FEED_VALUE;
+    return say(`Pôs ${n} sc de ${ITEMS[src].name.toLowerCase()} no cocho`, 'good');
+  }
+  if (o === O.TROUGH) return say(`Bebedouro: ${Math.round(w.troughs.get(i).water / TROUGH_MAX * 100)}%. Use o regador para encher.`);
+
+  // lavoura
+  const c = w.crops.get(i);
+  if (c) {
+    const d = CROPS[c.type];
+    if (c.dead) { w.crops.delete(i); return say('Limpou a planta morta'); }
+    if (!c.ripe) return say(`${d.name}: ${Math.round(c.prog * 100)}% crescida`);
+    const fert = w.fert[i];
+    const base = g.rng.range(d.yield[0], d.yield[1] + 0.99);
+    const n = Math.max(1, Math.floor(base * (0.35 + 0.65 * c.health) * (0.55 + 0.6 * fert)));
+    addItem(g, d.item, n);
+    g.stats.harvested[d.item] = (g.stats.harvested[d.item] || 0) + n;
+    w.fert[i] = Math.max(0.05, Math.min(1, fert - d.fertUse));
+    c.harvests++;
+    if (d.regrow && c.harvests < d.maxHarvests) { c.ripe = false; c.prog = d.regrow; c.ripeH = 0; }
+    else { w.crops.delete(i); w.idle[i] = 0; }
+    return say(`+${n} ${ITEMS[d.item].unit} de ${d.name.toLowerCase()}`, 'good');
+  }
+  return null;
+}
+
+function hoe(g, x, y) {
+  const w = g.world, i = w.idx(x, y), o = w.obj[i];
+  const c = w.crops.get(i);
+  if (c) {
+    if (c.dead) { w.crops.delete(i); return say('Limpou a planta morta'); }
+    return say('Tem uma planta aqui. Use a mão para colher.');
+  }
+  if (o === O.BUSH) { w.obj[i] = O.NONE; w.ground[i] = G.DIRT; w.dirty = true; return say('Arrancou o mato'); }
+  if (o === O.ROCK) {
+    if (--w.hp[i] > 0) return say('A pedra rachou...');
+    w.obj[i] = O.NONE; w.dirty = true; return say('Tirou a pedra');
+  }
+  if (o !== O.NONE) return null;
+  const gr = w.ground[i];
+  if (gr === G.GRASS || gr === G.DIRT || gr === G.PASTURE || gr === G.SAND || gr === G.YARD) {
+    if (gr === G.SAND) return say('Areia não serve para plantar.', 'bad');
+    w.ground[i] = G.TILLED; w.grass[i] = 0; w.idle[i] = 0;
+    return say('');
+  }
+  return null;
+}
+
+function axe(g, x, y) {
+  const w = g.world, i = w.idx(x, y), o = w.obj[i];
+  if (o === O.TREE) {
+    if (--w.hp[i] > 0) return say('Toc!');
+    w.obj[i] = O.NONE; w.dirty = true; addItem(g, 'madeira', 4);
+    return say('+4 madeira', 'good');
+  }
+  if (o === O.BUSH) { w.obj[i] = O.NONE; w.dirty = true; addItem(g, 'madeira', 1); return say('+1 madeira', 'good'); }
+  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1] }[o];
+  if (refund) {
+    w.obj[i] = O.NONE; w.dirty = true;
+    w.troughs.delete(i); w.feeders.delete(i); w.sprinklers.delete(i);
+    addItem(g, refund[0], refund[1]);
+    return say(`Desmontou (+${refund[1]} ${ITEMS[refund[0]].name.toLowerCase()})`);
+  }
+  return null;
+}
+
+function water(g, x, y) {
+  const w = g.world, i = w.idx(x, y), p = g.player;
+  if (w.ground[i] === G.WATER) { p.water = REGADOR_MAX; return say('Regador cheio', 'good'); }
+  if (w.obj[i] === O.TROUGH) {
+    if (p.water <= 0) return say('Regador vazio. Encha na água.', 'bad');
+    const t = w.troughs.get(i), add = Math.min(TROUGH_MAX - t.water, p.water);
+    t.water += add; p.water -= add;
+    return say(`Bebedouro ${Math.round(t.water / TROUGH_MAX * 100)}%`, 'good');
+  }
+  if (w.obj[i] !== O.NONE) return null;
+  if (p.water <= 0) return say('Regador vazio. Encha na água.', 'bad');
+  p.water--;
+  w.moist[i] = Math.min(1, w.moist[i] + 0.5);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    if (!w.inside(x + dx, y + dy)) continue;
+    const j = w.idx(x + dx, y + dy);
+    w.moist[j] = Math.min(1, w.moist[j] + 0.2);
+  }
+  return say('');
+}
+
+function plant(g, x, y) {
+  const w = g.world, i = w.idx(x, y), p = g.player;
+  const sel = PLANT_LIST[p.plant];
+  if ((g.inv[sel.item] || 0) <= 0) return say(`Sem ${ITEMS[sel.item].name.toLowerCase()}. Compre na cooperativa.`, 'bad');
+  if (w.obj[i] !== O.NONE || w.crops.has(i)) return null;
+  const gr = w.ground[i];
+  if (sel.id === 'capim') {
+    if (gr === G.PASTURE) return say('Já é pasto.');
+    if (gr !== G.GRASS && gr !== G.DIRT && gr !== G.TILLED && gr !== G.YARD) return say('Capim precisa de terra (não areia nem estrada).', 'bad');
+    w.ground[i] = G.PASTURE; w.grass[i] = Math.min(w.grass[i], 0.08); w.idle[i] = 0;
+    g.inv[sel.item]--;
+    return say('');
+  }
+  if (gr !== G.TILLED) return say('Are a terra com a enxada antes.', 'bad');
+  w.crops.set(i, { type: sel.id, prog: 0, health: 1, harvests: 0, ripe: false, dead: false, planted: g.time });
+  g.inv[sel.item]--;
+  return say('');
+}
+
+function build(g, x, y) {
+  const w = g.world, i = w.idx(x, y), p = g.player;
+  const b = BUILD_LIST[p.build];
+  if (w.obj[i] !== O.NONE || w.crops.has(i)) return null;
+  const gr = w.ground[i];
+  if (gr === G.WATER) return say('Não dá para construir na água.', 'bad');
+  if (Math.floor(p.x) === x && Math.floor(p.y) === y) return null;
+  if (hasAnimalOn(g, x, y)) return say('Tem um animal aí.', 'bad');
+  for (const k in b.cost) if ((g.inv[k] || 0) < b.cost[k]) return say(`Falta ${ITEMS[k].name.toLowerCase()} (${b.cost[k]}). ${k === 'madeira' ? 'Corte árvores ou compre.' : 'Compre na cooperativa.'}`, 'bad');
+  for (const k in b.cost) g.inv[k] -= b.cost[k];
+  w.obj[i] = b.obj; w.dirty = true;
+  if (b.obj === O.TROUGH) w.troughs.set(i, { water: 0 });
+  if (b.obj === O.FEEDER) w.feeders.set(i, { food: 0 });
+  if (b.obj === O.SPRINKLER) {
+    w.sprinklers.add(i);
+    if (!w.nearWater(x, y, 8)) return say('Aspersor instalado, mas não há água a até 8 tiles: ele não vai funcionar.', 'bad');
+  }
+  return say('');
+}
+
+function lasso(g, x, y, px, py) {
+  const w = g.world, p = g.player;
+  const led = ledAnimal(g);
+  if (led) {
+    const i = w.idx(x, y);
+    if (!w.walkableAnimal(i)) return say('Solte o animal num lugar livre.', 'bad');
+    led.x = x + 0.5; led.y = y + 0.5; led.led = false; p.led = null; led.path = [];
+    settleAnimal(w, led);
+    led.owned = true;
+    const ci = w.comp[w.idx(Math.floor(led.x), Math.floor(led.y))];
+    if (w.compOpen.has(ci)) return say(`${animalLabel(led)} solto, mas a área não está cercada: ele pode fugir!`, 'bad');
+    return say(`${animalLabel(led)} solto no pasto`, 'good');
+  }
+  const a = animalAt(g, px, py, 1.1);
+  if (!a) return say('Mire num animal.', 'bad');
+  if (Math.hypot(a.x - p.x, a.y - p.y) > LASSO_REACH) return say('Longe demais para o laço.', 'bad');
+  if (a.owned) { a.led = true; a.path = []; p.led = a.id; return say(`Levando ${animalLabel(a).toLowerCase()}`); }
+  const chance = ANIMALS[a.sp].catch * (p.sneak ? 1.25 : 1) * (a.fleeing > 0 ? 0.6 : 1);
+  if (g.rng.chance(chance)) {
+    a.led = true; a.path = []; a.fleeing = 0; p.led = a.id;
+    const lb = animalLabel(a).toLowerCase();
+    return say(`Laçou ${/a$/.test(lb) ? 'uma' : 'um'} ${lb}! Leve para o pasto cercado.`, 'good');
+  }
+  if (!a.owned) startFlee(g, a);
+  return say('Errou o laço! O animal se assustou.', 'bad');
+}
+
+function fertilize(g, x, y) {
+  const w = g.world, i = w.idx(x, y);
+  if ((g.inv.adubo || 0) <= 0) return say('Sem adubo. Compre na cooperativa.', 'bad');
+  const gr = w.ground[i];
+  if (gr !== G.TILLED && gr !== G.PASTURE && !w.crops.has(i)) return say('Adube terra arada, lavoura ou pasto.', 'bad');
+  if (w.fert[i] > 0.92) return say('A terra já está fértil.');
+  g.inv.adubo--;
+  w.fert[i] = Math.min(1, w.fert[i] + 0.35);
+  return say(`Fertilidade ${Math.round(w.fert[i] * 100)}%`, 'good');
+}
+
+export function toolName(i) { return TOOLS[i].name; }

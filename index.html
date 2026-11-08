@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Terra Boa</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game"></div>
+
+  <header id="hud">
+    <div class="brand">Terra<b>Boa</b></div>
+    <div class="stat"><small>Caixa</small><span id="money">R$ 0</span></div>
+    <div class="stat"><small id="season">Primavera</small><span id="date">Set · dia 1</span></div>
+    <div class="stat"><small>Hora</small><span id="clock">06:00</span></div>
+    <button class="stat click" id="wxBtn" title="Previsão do tempo (T)"><small id="wxLabel">Tempo</small><span id="wx">☀️ 22°</span></button>
+    <div class="speeds" id="speeds">
+      <button data-speed="0" title="Pausar (P)">❚❚</button>
+      <button data-speed="1" class="on" title="Normal">▶</button>
+      <button data-speed="2" title="Rápido">▶▶</button>
+      <button data-speed="4" title="Muito rápido">▶▶▶</button>
+    </div>
+  </header>
+
+  <nav id="menu">
+    <button id="mktBtn" title="Mercado (M)"><span>💰</span><em>Mercado</em></button>
+    <button id="farmBtn" title="Fazenda (F)"><span>🐄</span><em>Fazenda</em></button>
+    <button id="layerBtn" title="Mapas do solo (L)"><span>🗺️</span><em id="layerLabel">Solo</em></button>
+    <button id="helpBtn" title="Ajuda e opções (H)"><span>☰</span><em>Menu</em></button>
+  </nav>
+
+  <aside id="inv"></aside>
+  <div id="toasts"></div>
+  <div id="tip"></div>
+
+  <div id="subbar"></div>
+  <footer id="hotbar"></footer>
+  <div id="water"><i></i></div>
+
+  <div id="joy"><i></i></div>
+  <div id="touchBtns">
+    <button id="tUse">Usar</button>
+    <button id="tHand">Mão</button>
+  </div>
+
+  <div id="modal" class="hidden">
+    <div class="sheet">
+      <header><h2 id="mTitle"></h2><button id="mClose" title="Fechar (Esc)">✕</button></header>
+      <nav id="mTabs"></nav>
+      <div id="mBody"></div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

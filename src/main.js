@@ -1,6 +1,7 @@
 // Liga tudo: jogo, desenho, interface e controles.
 import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED, BUSH_SLOW, G, O, ANIMALS, ITEMS } from './config.js';
-import { burst, treeFall, shakeTile } from './fx.js';
+import { burst, treeFall, shakeTile, fx } from './fx.js';
+import { unlock, sfx, ambient, footstep, animalCall, soundOn, setSound, audioDebug } from './sound.js';
 import { newGame, advance, dayOf, hourOf } from './game.js';
 import * as Saves from './saves.js';
 import { updateAnimals } from './animals.js';
@@ -21,7 +22,7 @@ ui.refreshTools();
 ui.showTitle();
 
 function hook(game) {
-  game.onNotify = (t, k) => { ui.toast(t, k); net.relay(t, k); };
+  game.onNotify = (t, k) => { ui.toast(t, k); net.relay(t, k); if (k === 'bad') sfx('aviso'); else if (k === 'good') sfx('bom'); };
 }
 
 // ---------- jogar junto ----------
@@ -126,6 +127,14 @@ window.addEventListener('beforeunload', () => { if (net.isHost) net.broadcast({ 
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); net.hostVisible(!document.hidden); });
 
 // ---------- entrada ----------
+addEventListener('pointerdown', () => unlock(), true);
+addEventListener('keydown', () => unlock(), true);
+R.onThunder = () => sfx('trovao');
+const soundBtn = document.getElementById('soundBtn');
+function showSound() { if (soundBtn) soundBtn.querySelector('span').textContent = soundOn() ? '🔊' : '🔇'; }
+if (soundBtn) soundBtn.onclick = () => { setSound(!soundOn()); unlock(); showSound(); ui.toast(soundOn() ? 'Som ligado' : 'Som desligado'); };
+showSound();
+ui.onSound = showSound;
 const keys = new Set();
 const mouse = { x: innerWidth / 2, y: innerHeight / 2, down: false, inside: false, lastTile: null };
 const joy = { active: false, dx: 0, dy: 0, id: null };
@@ -259,6 +268,37 @@ function snapTiles(w, x, y) {
 }
 function actionFx(tool, t, before, r) {
   const w = g.world;
+  const snd = new Set();
+  const msg = r.msg || '';
+  if (r.kind === 'bad') snd.add('erro');
+  for (const b of before) {
+    const o = w.obj[b.i], gr = w.ground[b.i];
+    const crop = w.crops.get(b.i), harv = crop ? crop.harvests : -1;
+    if (b.o === O.TREE && o === O.TREE && b.x === t.x && b.y === t.y && tool === 'machado') snd.add('machado');
+    else if (b.o === O.TREE && o !== O.TREE) snd.add('arvore');
+    else if (b.o === O.BUSH && o !== O.BUSH) snd.add('mato');
+    else if (b.o === O.ROCK) snd.add('pedra');
+    else if (b.o !== o && o !== O.NONE) snd.add('construir');
+    else if (b.o !== o && o === O.NONE) snd.add('desmontar');
+    if (b.gr !== gr && gr === G.TILLED) snd.add('enxada');
+    else if (b.gr !== gr && gr === G.PASTURE) snd.add('plantar');
+    else if (b.gr !== gr) snd.add('enxada');
+    if (b.crop === -1 && harv === 0) snd.add('plantar');
+    if (b.crop >= 0 && (harv === -1 || harv > b.crop)) snd.add('colher');
+    if (tool === 'regador' && w.moist[b.i] > b.m + 0.3) snd.add('agua');
+  }
+  if (tool === 'regador' && /cheio|Apagou/.test(msg)) snd.add(/cheio/.test(msg) ? 'encher' : 'agua');
+  if (/ovos/.test(msg)) snd.add('ovos');
+  if (/Ordenhou/.test(msg)) snd.add('leite');
+  if (/Tosquiou/.test(msg)) snd.add('tosquia');
+  if (/Fertilidade/.test(msg)) snd.add('adubo');
+  if (tool === 'laco' && r.kind !== 'bad') snd.add('laco');
+  if (/Laçou|Levando/.test(msg)) { snd.add('laco'); setTimeout(() => sfx('pegou'), 250); }
+  if (/Errou o laço/.test(msg)) { snd.delete('erro'); snd.add('laco'); }
+  if (/Montou/.test(msg)) animalCall('cavalo', true, 0.8);
+  if (/dormiu|Bom dia/.test(msg)) snd.add('bom');
+  if (snd.size > 1) snd.delete('erro');
+  for (const k of snd) sfx(k);
   for (const b of before) {
     const o = w.obj[b.i], gr = w.ground[b.i], cx = b.x + 0.5, cy = b.y + 0.6;
     const crop = w.crops.get(b.i), harv = crop ? crop.harvests : -1;
@@ -292,6 +332,7 @@ function doUse(tool, t, opts = {}) {
   net.markAround(t.x, t.y);
   if (r?.slept && net.isHost) { net.note(`${g.player.name || 'O anfitrião'} foi dormir. Bom dia!`, 'good'); net.sendWorld(); }
   if (r && r.ok !== false && before) actionFx(tool, t, before, r);
+  else if (r?.kind === 'bad') sfx('erro');
   if (!r) return;
   if (r.open === 'market') { ui.open('mercado', { atCoop: true, force: true }); return; }
   if (r.slept) save();
@@ -328,7 +369,9 @@ function movePlayer(dt) {
   if (free(p.x, p.y + sy)) p.y += sy;
   p.x = Math.max(0.3, Math.min(w.w - 0.3, p.x));
   p.y = Math.max(0.3, Math.min(w.h - 0.2, p.y));
+  const st0 = Math.floor(p.step / Math.PI);
   p.step += Math.hypot(sx, sy) * (p.mount ? 3 : 5);
+  if (Math.floor(p.step / Math.PI) !== st0 && !(p.mount?.kind === 'trator')) footstep(g);
   // mato farfalha; poeira nos pés em chão de terra
   const fi = w.idx(Math.floor(p.x), Math.floor(p.y));
   if (w.obj[fi] === O.BUSH) { shakeTile(fi, 0.12); if (Math.random() < dt * 6) burst(p.x, p.y, 'folha', 1, 10, 0.35, 18); }
@@ -343,7 +386,7 @@ function movePlayer(dt) {
   if (!w.drops.some(d => d.x === ex && d.y === ey)) { eggAsk = null; return; }
   if (net.isClient) { const k = ex + ',' + ey; if (eggAsk !== k) { eggAsk = k; net.act('eggs', { x: ex, y: ey }); } return; }
   const r = pickEggsAt(g, ex, ey);
-  if (r?.msg) ui.toast(r.msg, r.kind);
+  if (r?.msg) { ui.toast(r.msg, r.kind); sfx('ovos'); }
 }
 
 let eggAsk = null;
@@ -369,6 +412,7 @@ function frame(now) {
     advance(g, dt * MIN_PER_SEC * g.speed);
   } else updateAnimals(g, 0);
   net.update(dt);
+  ambient(g, dt, fx, { paused: !running && !net.isClient });
   if (dayOf(g) !== lastDay) { lastDay = dayOf(g); const r = save(true); if (r && !r.ok) ui.toast(r.reason, 'bad'); }
 
   // alvo e dica
@@ -403,3 +447,4 @@ requestAnimationFrame(frame);
 window.__game = () => g;
 window.__R = R;
 window.__net = net;
+window.__snd = { sfx, animalCall, ambient: (dt) => ambient(g, dt, fx), debug: audioDebug };

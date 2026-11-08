@@ -9,6 +9,7 @@ import { hireWorker, fireWorker } from './workers.js';
 import * as Saves from './saves.js';
 import { generateWorld } from './world.js';
 import { COMMANDS, runCommand, ANIMAL_OFFERS, offerPrice, tractorPrice } from './commands.js';
+import { sfx, soundOn, soundVol, setSound } from './sound.js';
 
 const NICK_KEY = 'terraboa-nome';
 const nick = () => { try { return localStorage.getItem(NICK_KEY) || ''; } catch { return ''; } };
@@ -34,7 +35,14 @@ export class UI {
     const body = $('mBody');
     body.addEventListener('click', e => {
       const b = e.target.closest('[data-act]');
-      if (b && !b.disabled) this.act(b.dataset.act, b.dataset, b);
+      if (b && !b.disabled) { if (!COMMANDS.has(b.dataset.act)) sfx('clique'); this.act(b.dataset.act, b.dataset, b); }
+    });
+    body.addEventListener('input', e => {
+      if (e.target.id === 'volRange') { setSound(true, +e.target.value / 100); this.onSound && this.onSound(); }
+    });
+    body.addEventListener('change', e => {
+      if (e.target.id === 'sndOn') { setSound(e.target.checked); this.onSound && this.onSound(); if (e.target.checked) sfx('bom'); }
+      if (e.target.id === 'volRange') sfx('pegou');
     });
     $('modal').addEventListener('pointerdown', () => { this.pressing = true; });
     addEventListener('pointerup', () => { this.pressing = false; });
@@ -389,7 +397,10 @@ export class UI {
 
   // resultado de um comando (local ou vindo do anfitrião)
   cmdResult(r) {
-    if (r?.msg) this.toast(r.msg, r.kind);
+    if (r?.msg) {
+      this.toast(r.msg, r.kind);
+      sfx(r.kind === 'bad' ? 'erro' : /^Vendeu/.test(r.msg) ? 'moeda' : /^Comprou|contratado|Trator/.test(r.msg) ? 'compra' : 'clique');
+    }
     if (r?.close) { this.close(); return; }
     if (this.panel) this.render();
   }
@@ -637,6 +648,8 @@ export class UI {
       <p><button class="btn" data-act="netleave">Sair da sala</button> <button class="btn" data-act="title">Tela inicial</button></p>`;
     return `<div class="card"><label class="tfield">Nome desta fazenda<span style="display:flex;gap:6px"><input id="farmName" maxlength="40" value="${esc(g.farmName || '')}" style="flex:1"><button class="btn" data-act="renamenow">Renomear</button></span></label>
       <div class="kv" style="margin-top:8px"><span>Semente do mapa</span><b>${g.seed}</b></div><div class="kv"><span>Dias jogados</span><b>${g.stats.days}</b></div></div>
+      <div class="card"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="sndOn" ${soundOn() ? 'checked' : ''}> Som (ambiente, bichos e ferramentas)</label>
+      <label class="tfield" style="margin-top:6px">Volume<input type="range" id="volRange" min="0" max="100" value="${Math.round(soundVol() * 100)}"></label></div>
       <p class="note" style="margin-top:10px">Esta fazenda salva sozinha a cada dia e ao fechar a página. Começar uma fazenda nova não apaga esta.</p>
       <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="savenow">Salvar agora</button>
       <button class="btn" data-act="dupnow" title="Guarda uma cópia do jeito que está agora">Criar ponto de volta</button>

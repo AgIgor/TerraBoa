@@ -305,7 +305,7 @@ export class Renderer {
     drawLeaves(ctx, vw, vh, dt, today.season);
     drawHail(ctx, vw, vh, !!(today.hail && rainNow > 0 && hour < today.rainStart + 2), dt);
     // relâmpagos
-    if (today.storm && rainNow > 0 && Math.random() < dt * 0.15) this.flash = 1;
+    if (today.storm && rainNow > 0 && Math.random() < dt * 0.15) { this.flash = 1; this.onThunder?.(); }
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${(this.flash * 0.5).toFixed(2)})`; ctx.fillRect(0, 0, vw, vh); this.flash -= dt * 4; }
     // céu nublado escurece um pouco; calor dá um tom quente
     if (!rainNow && today.cloud > 0.4) { ctx.fillStyle = `rgba(60,70,90,${((today.cloud - 0.4) * 0.25).toFixed(2)})`; ctx.fillRect(0, 0, vw, vh); }

@@ -72,37 +72,37 @@ export const ANIMALS = {
   gado: {
     name: 'Gado', male: 'Boi', female: 'Vaca', young: 'Bezerro',
     forage: 1.2, water: 1.0, speed: 1.1, flee: 3.0, catch: 0.55,
-    birthW: [35, 45], adultW: 300, maxW: 560, gain: 5, gestation: 12, litter: [1, 1], breed: 0.16,
+    birthW: [35, 45], adultW: 300, maxW: 560, gain: 5, gestation: 12, litter: [1, 1], breed: 0.16, season: [1.3, 1.1, 0.8, 0.6], rest: 6, cover: 25,
     heat: 32, cold: -5, size: 1.0, market: 'boi', sell: 'arroba', milk: 8, milkItem: 'leite',
   },
   porco: {
     name: 'Porco', male: 'Porco', female: 'Porca', young: 'Leitão',
     forage: 0.4, water: 0.5, speed: 1.2, flee: 2.6, catch: 0.5,
-    birthW: [1.5, 2.5], adultW: 80, maxW: 140, gain: 5, gestation: 7, litter: [2, 4], breed: 0.22,
+    birthW: [1.5, 2.5], adultW: 80, maxW: 140, gain: 5, gestation: 7, litter: [2, 4], breed: 0.22, season: [1, 1, 1, 0.85], rest: 3, cover: 10,
     heat: 28, cold: 0, size: 0.7, market: 'porco', sell: 'kg',
   },
   galinha: {
     name: 'Galinha', male: 'Galo', female: 'Galinha', young: 'Pintinho',
     forage: 0.08, water: 0.1, speed: 1.5, flee: 2.2, catch: 0.42,
-    birthW: [0.05, 0.06], adultW: 1.6, maxW: 2.6, gain: 0.35, gestation: 4, litter: [1, 3], breed: 0.28,
+    birthW: [0.05, 0.06], adultW: 1.6, maxW: 2.6, gain: 0.35, gestation: 4, litter: [1, 3], breed: 0.28, season: [1.3, 1.1, 0.8, 0.5], rest: 0, cover: 10,
     heat: 30, cold: 8, size: 0.38, market: 'frango', sell: 'cabeca',
   },
   cavalo: {
     name: 'Cavalo', male: 'Cavalo', female: 'Égua', young: 'Potro',
     forage: 1.0, water: 0.9, speed: 1.7, flee: 3.6, catch: 0.38,
-    birthW: [35, 45], adultW: 380, maxW: 480, gain: 4, gestation: 14, litter: [1, 1], breed: 0.1,
+    birthW: [35, 45], adultW: 380, maxW: 480, gain: 4, gestation: 14, litter: [1, 1], breed: 0.1, season: [1.4, 1.1, 0.6, 0.4], rest: 8, cover: 15,
     heat: 33, cold: -5, size: 1.05, market: 'cavalo', sell: 'cabeca',
   },
   ovelha: {
     name: 'Ovelha', male: 'Carneiro', female: 'Ovelha', young: 'Cordeiro',
     forage: 0.25, water: 0.3, speed: 1.2, flee: 2.6, catch: 0.5,
-    birthW: [3, 5], adultW: 40, maxW: 70, gain: 2.5, gestation: 8, litter: [1, 2], breed: 0.2,
+    birthW: [3, 5], adultW: 40, maxW: 70, gain: 2.5, gestation: 8, litter: [1, 2], breed: 0.2, season: [0.6, 0.8, 1.5, 1.0], rest: 4, cover: 30,
     heat: 29, cold: -6, size: 0.6, market: 'cordeiro', sell: 'kg', wool: 0.3,
   },
   cabra: {
     name: 'Cabra', male: 'Bode', female: 'Cabra', young: 'Cabrito',
     forage: 0.25, water: 0.25, speed: 1.35, flee: 2.6, catch: 0.5,
-    birthW: [2.5, 4], adultW: 38, maxW: 62, gain: 2.3, gestation: 8, litter: [1, 2], breed: 0.2,
+    birthW: [2.5, 4], adultW: 38, maxW: 62, gain: 2.3, gestation: 8, litter: [1, 2], breed: 0.2, season: [0.7, 0.9, 1.4, 1.0], rest: 4, cover: 25,
     heat: 35, cold: 0, size: 0.55, market: 'caprino', sell: 'kg', milk: 2.2, milkItem: 'leite_cabra',
   },
 };

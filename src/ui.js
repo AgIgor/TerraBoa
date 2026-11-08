@@ -3,7 +3,7 @@ import { TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, CROPS, CROP_LIST, ANIMALS, G, O, 
 import { COMMODITIES, SELLABLE, INPUTS, price, inputPrice, sell, trend } from './market.js';
 import { dateText, clockText, hourOf, dayOf } from './game.js';
 import { tempAt, weatherLabel, weatherIcon, ENSO, seasonParams, EVENT_TEXT, windLabel } from './climate.js';
-import { animalLabel, animalValue, animalMarketQty, isAdult, makeAnimal } from './animals.js';
+import { animalLabel, animalValue, animalMarketQty, isAdult, makeAnimal, breedText } from './animals.js';
 import { fTemp, cropStage, storageCap, grainStock } from './sim.js';
 import { hireWorker, fireWorker } from './workers.js';
 import * as Saves from './saves.js';
@@ -536,7 +536,7 @@ export class UI {
     if (!own.length) return '<p class="note">Nenhum animal ainda. Cerque um pasto (cerca + porteira), ponha água (bebedouro ou beira de rio) e laçe os bichos soltos (ferramenta 7). Ande devagar segurando Shift para chegar perto sem espantar.</p>';
     const rows = own.sort((a, b) => a.sp.localeCompare(b.sp)).map(a => `<tr><td>${animalLabel(a)} <span class="unit">#${a.id}</span></td><td class="num">${weightText(a)}</td>
       <td class="num">${bar(a.hunger)}</td><td class="num">${bar(a.thirst, '#4a92cf')}</td><td class="num">${bar(a.health, '#86d37a')}</td>
-      <td class="unit">${[a.preg ? `prenhe (${a.preg} d)` : '', ANIMALS[a.sp].milk && a.sex === 'f' && a.milk >= 1 ? `${Math.floor(a.milk)} L p/ ordenhar` : '', (a.wool || 0) >= 1 ? `${Math.floor(a.wool)} kg de lã` : '', a.ridden ? 'montado' : '', a.comfort != null && a.comfort < 0.8 ? 'estresse térmico' : '', a.led ? 'no laço' : ''].filter(Boolean).join(' · ')}</td></tr>`).join('');
+      <td class="unit">${[breedText(g, a), ANIMALS[a.sp].milk && a.sex === 'f' && a.milk >= 1 ? `${Math.floor(a.milk)} L p/ ordenhar` : '', (a.wool || 0) >= 1 ? `${Math.floor(a.wool)} kg de lã` : '', a.ridden ? 'montado' : '', a.comfort != null && a.comfort < 0.8 ? 'estresse térmico' : '', a.led ? 'no laço' : ''].filter(Boolean).join(' · ')}</td></tr>`).join('');
     return `<table class="mk"><tr><th>Animal</th><th class="num">Peso</th><th class="num">Comida</th><th class="num">Água</th><th class="num">Saúde</th><th></th></tr>${rows}</table>`;
   }
   tab_fazenda_lavouras(g) {
@@ -598,6 +598,9 @@ export class UI {
         <li><b>Rio:</b> construa ponte (6 madeiras) em cima da água. Animais também passam.</li>
         <li><b>Fogo:</b> na seca longa pode pegar fogo no campo; o vento leva para leste. Terra arada, estrada e água fazem aceiro; o regador apaga e a chuva também.</li>
         <li><b>Noite:</b> o lampião (3 madeiras) ilumina em volta.</li>
+        <li><b>Cria:</b> fêmea adulta, bem tratada e no mesmo pasto que um macho emprenha. Cada espécie tem sua época (vaca e égua na primavera, ovelha e cabra no outono) e descansa depois do parto. O painel Fazenda → Animais mostra a situação de cada uma.</li>
+        <li><b>Pintinhos:</b> com galo no cercado, ovos deixados no chão 3 dias podem chocar. Recolha os ovos se quiser vender.</li>
+        <li><b>Bichos soltos:</b> andam em manadas e têm cria. Manadas novas chegam pelas bordas do mapa, mais na primavera. Laçou uma mãe? O filhote vem atrás e fica no seu pasto.</li>
         <li><b>Longe do rio?</b> Compre um poço na cooperativa e construa: aspersores a até 12 tiles dele funcionam, e o regador enche nele.</li>
         <li><b>Arou no lugar errado?</b> Clique com a enxada na terra arada para desfazer.</li>
         <li><b>Noite:</b> durma na casa (mão) depois das 19h. O jogo salva sozinho todo dia.</li>
@@ -639,7 +642,7 @@ function animalInfo(g, a) {
   const lines = [`<b>${animalLabel(a)}</b>${a.owned ? '' : ' <span class="muted">· solto no campo</span>'}`, weightText(a)];
   if (a.owned) {
     lines.push(`Comida ${bar(a.hunger)}`, `Água ${bar(a.thirst, '#4a92cf')}`, `Saúde ${bar(a.health, '#86d37a')}`);
-    if (a.preg) lines.push(`Prenhe · nasce em ${a.preg} dias`);
+    const bt = breedText(g, a); if (bt) lines.push(`<span class="muted">${bt}</span>`);
     if (d.milk && a.sex === 'f' && isAdult(a)) lines.push(a.milk >= 1 ? `${Math.floor(a.milk)} L para ordenhar (mão)` : '<span class="muted">já ordenhada</span>');
     if (d.wool) lines.push((a.wool || 0) >= 1 ? `${Math.floor(a.wool)} kg de lã para tosquiar (mão)` : `<span class="muted">lã crescendo (${(a.wool || 0).toFixed(1)} kg)</span>`);
     if (a.sp === 'cavalo' && isAdult(a) && !a.ridden) lines.push('<span class="muted">X ou mão: montar</span>');

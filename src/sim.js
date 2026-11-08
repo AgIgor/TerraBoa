@@ -1,5 +1,6 @@
 // Simulação da terra: umidade, lavouras, capim, regeneração natural. Sem DOM.
-import { G, O, CROPS, GRASS_CAP, GRASS_RATE, TROUGH_MAX, YEAR_DAYS } from './config.js';
+import { G, O, CROPS, ITEMS, GRASS_CAP, GRASS_RATE, TROUGH_MAX, YEAR_DAYS, GRAINS, STORE_BASE, STORE_ADD, SPOIL } from './config.js';
+import { workersDay } from './workers.js';
 import { tempAt, rainAt, climateNextDay, EVENT_TEXT, ENSO } from './climate.js';
 import { marketDay } from './market.js';
 import { animalsHour, animalsDay } from './animals.js';
@@ -137,8 +138,28 @@ export function daily(g, newDay) {
   if (today.event && yesterday.event !== today.event) g.notify(EVENT_TEXT[today.event], 'info');
 
   // perecíveis
-  if (g.inv.leite > 0) { const lost = Math.ceil(g.inv.leite * 0.5); g.inv.leite -= lost; g.notify(`${lost} L de leite azedaram. Venda o leite no mesmo dia.`, 'bad'); }
-  if (g.inv.ovos > 0) g.inv.ovos = Math.floor(g.inv.ovos * 0.88);
+  const lostTxt = [];
+  for (const id in SPOIL) {
+    const have = g.inv[id] || 0;
+    if (have <= 0) continue;
+    const lost = Math.min(have, Math.ceil(have * SPOIL[id]));
+    g.inv[id] -= lost;
+    if (id !== 'ovos') lostTxt.push(`${lost} ${ITEMS[id].unit} de ${ITEMS[id].name.toLowerCase()}`);
+  }
+  if (lostTxt.length) g.notify(`Estragou: ${lostTxt.join(', ')}. Leite e cana precisam ser vendidos logo.`, 'bad');
+  // grão fora do armazém pega umidade e caruncho
+  const cap = storageCap(w), stored = grainStock(g);
+  if (stored > cap) {
+    const over = stored - cap;
+    let lostG = 0;
+    for (const id of GRAINS) {
+      const share = (g.inv[id] || 0) / stored;
+      const l = Math.min(g.inv[id] || 0, Math.ceil(over * share * 0.1));
+      g.inv[id] -= l; lostG += l;
+    }
+    if (lostG) g.notify(`${lostG} sacas estragaram fora do armazém (cabem ${cap}). Construa paiol ou silo.`, 'bad');
+  }
+  workersDay(g);
 
   // terra
   const n = w.w * w.h;
@@ -178,3 +199,11 @@ function neighborObj(w, x, y, a, b = -1) {
   return false;
 }
 function farFromFarm(w, x, y, r) { return Math.abs(x - w.farm.cx) > r + 3 || Math.abs(y - w.farm.cy) > r + 2; }
+
+// Capacidade de armazenagem de grãos (sacas)
+export function storageCap(w) {
+  let cap = STORE_BASE;
+  for (let i = 0; i < w.obj.length; i++) { const add = STORE_ADD[w.obj[i]]; if (add) cap += add; }
+  return cap;
+}
+export function grainStock(g) { return GRAINS.reduce((s, id) => s + (g.inv[id] || 0), 0); }

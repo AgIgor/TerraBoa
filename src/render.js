@@ -90,7 +90,9 @@ export class Renderer {
     }
     for (const b of w.buildings) list.push([b.y + b.h, 2, b]);
     for (const e of w.drops) if (e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1) list.push([e.y + 0.3, 3, e]);
-    for (const a of g.animals) if (a.x > x0 - 1 && a.x < x1 + 2 && a.y > y0 - 1 && a.y < y1 + 2) list.push([a.y + 0.2, 4, a]);
+    for (const a of g.animals) if (!a.ridden && a.x > x0 - 1 && a.x < x1 + 2 && a.y > y0 - 1 && a.y < y1 + 2) list.push([a.y + 0.2, 4, a]);
+    for (const v of g.vehicles) if (!(p.mount?.kind === 'trator' && p.mount.id === v.id)) list.push([v.y + 0.3, 6, v]);
+    for (const k of g.workers) list.push([k.y + 0.25, 7, k]);
     list.push([p.y + 0.25, 5, p]);
     list.sort((a, b) => a[0] - b[0]);
 
@@ -107,6 +109,8 @@ export class Renderer {
         case 3: drawEggs(ctx, it[2]); break;
         case 4: drawAnimal(ctx, it[2], now, ui.hoverAnimal === it[2]); break;
         case 5: drawPlayer(ctx, g, now); break;
+        case 6: drawTractor(ctx, it[2].x * T, it[2].y * T, it[2].fx >= 0 ? 1 : -1); break;
+        case 7: drawWorker(ctx, it[2]); break;
       }
     }
     // corda do laço
@@ -175,6 +179,24 @@ export class Renderer {
         const lv = (f?.food || 0) / FEEDER_MAX;
         if (lv > 0) { ctx.fillStyle = '#e8c040'; ctx.fillRect(px + 4, py + 14 + 8 * (1 - lv), 24, 8 * lv); }
         ctx.fillStyle = '#6e4626'; ctx.fillRect(px + 2, py + 24, 3, 5); ctx.fillRect(px + 27, py + 24, 3, 5);
+        break;
+      }
+      case O.PAIOL: {
+        ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(px + 2, py + 26, 32, 6);
+        ctx.fillStyle = '#6b4526'; ctx.fillRect(px + 3, py + 18, 3, 10); ctx.fillRect(px + 26, py + 18, 3, 10);
+        ctx.fillStyle = '#a8763e'; ctx.fillRect(px + 1, py - 4, 30, 24);
+        ctx.fillStyle = '#8a5c2c'; for (let k = 0; k < 30; k += 5) ctx.fillRect(px + 1 + k, py - 4, 1, 24);
+        ctx.fillStyle = '#e8c040'; ctx.fillRect(px + 9, py + 4, 14, 8);
+        ctx.fillStyle = '#7a4a22'; ctx.beginPath(); ctx.moveTo(px - 2, py - 2); ctx.lineTo(px + 16, py - 16); ctx.lineTo(px + 34, py - 2); ctx.fill();
+        break;
+      }
+      case O.SILO: {
+        ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(px + 18, py + 28, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c8ccd0'; ctx.fillRect(px + 2, py - 40, 28, 68);
+        ctx.fillStyle = '#a8acb0'; for (let yy = py - 34; yy < py + 26; yy += 7) ctx.fillRect(px + 2, yy, 28, 1);
+        ctx.fillStyle = '#e4e8ec'; ctx.fillRect(px + 6, py - 40, 4, 68);
+        ctx.fillStyle = '#b0b4b8'; ctx.beginPath(); ctx.moveTo(px, py - 40); ctx.lineTo(px + 16, py - 54); ctx.lineTo(px + 32, py - 40); ctx.fill();
+        ctx.fillStyle = '#6a7078'; ctx.fillRect(px + 22, py - 36, 2, 62);
         break;
       }
       case O.SPRINKLER: {
@@ -357,6 +379,31 @@ function drawAnimal(ctx, a, now, hover) {
     ctx.fillStyle = '#222'; ctx.fillRect(11, -10, 1.5, 1.5);
     ctx.strokeStyle = '#e09098'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(-12, -9, 2, 0, Math.PI * 1.5); ctx.stroke();
     if (a.owned) { ctx.fillStyle = '#f0c020'; ctx.fillRect(9, -15, 2.5, 2.5); }
+  } else if (a.sp === 'cavalo') {
+    drawHorse(ctx, a, legPh, bob);
+  } else if (a.sp === 'ovelha') {
+    const fluff = 0.8 + Math.min(1, (a.wool || 0) / 4) * 0.45;
+    legs(ctx, [-6, -3, 3, 6], 0, 6, legPh, '#3a3a3a');
+    ctx.fillStyle = '#f2eee2';
+    for (const [bx, by, br] of [[-5, -9, 5], [0, -11, 5.5], [5, -9, 5], [-2, -6, 5], [3, -6, 5]]) { ctx.beginPath(); ctx.arc(bx, by + bob * 0.3, br * fluff, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#d8d2c2'; ctx.beginPath(); ctx.arc(-2, -7, 3 * fluff, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2e2a26'; ctx.beginPath(); ctx.ellipse(10, -11, 3.6, 4.4, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(7, -14, 3, 2);
+    if (a.sex === 'm' && isAdult(a)) { ctx.strokeStyle = '#c8b890'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(9, -13, 2.5, Math.PI, Math.PI * 2.4); ctx.stroke(); }
+    ctx.fillStyle = '#fff'; ctx.fillRect(11, -12, 1, 1);
+    if (a.owned) { ctx.fillStyle = '#f0c020'; ctx.fillRect(7, -15, 2, 2); }
+  } else if (a.sp === 'cabra') {
+    const col = ['#8a7a6a', '#e8e2d6', '#5a4030'][a.id % 3];
+    legs(ctx, [-6, -3, 3, 6], 0, 8, legPh, '#4a3a2e');
+    ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, -9 + bob * 0.3, 9, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(9, -14, 3.5, 3, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(10, -13); ctx.lineTo(13, -9); ctx.lineTo(11, -11); ctx.fill();
+    ctx.fillStyle = '#d8d0c0'; ctx.fillRect(10, -10, 1.5, 3);
+    ctx.strokeStyle = '#5a4a3a'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(8, -16); ctx.quadraticCurveTo(5, a.sex === 'm' ? -22 : -19, 3, a.sex === 'm' ? -20 : -17); ctx.stroke();
+    ctx.fillStyle = '#222'; ctx.fillRect(10, -15, 1.2, 1.2);
+    ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(-8, -11); ctx.lineTo(-10, -14); ctx.stroke();
+    if (a.owned) { ctx.fillStyle = '#f0c020'; ctx.fillRect(7, -17, 2, 2); }
   } else {
     const rooster = a.sex === 'm' && isAdult(a);
     const chick = a.weight < d.adultW * 0.6;
@@ -384,51 +431,128 @@ function legs(ctx, xs, top, len, ph, col) {
   xs.forEach((lx, k) => { const off = (k % 2 ? ph : -ph) * 1.5; ctx.fillRect(lx + off, top - 4, 2.5, len - Math.abs(off) * 0.3); });
 }
 
-// ---------- fazendeiro ----------
-function drawPlayer(ctx, g, now) {
-  const p = g.player;
-  const x = Math.round(p.x * T), y = Math.round(p.y * T);
-  const dir = Math.abs(p.fx) > Math.abs(p.fy) ? (p.fx > 0 ? 'r' : 'l') : (p.fy < 0 ? 'u' : 'd');
-  const walk = p.moving ? Math.sin(p.step) : 0;
-  const bob = p.moving ? Math.abs(Math.sin(p.step)) * 1.2 : 0;
-  ctx.save(); ctx.translate(x, y);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0, 2, 8, 3, 0, 0, Math.PI * 2); ctx.fill();
-  // pernas
-  ctx.fillStyle = '#4a5a7a';
-  ctx.fillRect(-4, -8, 3, 8 + walk * 1.5); ctx.fillRect(1, -8, 3, 8 - walk * 1.5);
-  ctx.fillStyle = '#3a2618'; ctx.fillRect(-4, -1 + walk * 1.5, 3, 2); ctx.fillRect(1, -1 - walk * 1.5, 3, 2);
-  // corpo: camisa xadrez
+// ---------- cavalo ----------
+const HORSE = ['#7a4a26', '#3a2a20', '#c8a878', '#e8e4dc'];
+function drawHorse(ctx, a, legPh, bob) {
+  const coat = HORSE[a.id % 4], mane = a.id % 4 === 2 ? '#f0e8d0' : '#2a1a10';
+  legs(ctx, [-9, -5, 6, 10], 0, 13, legPh, coat === '#e8e4dc' ? '#c8c4bc' : '#4a3020');
+  ctx.fillStyle = coat; ctx.beginPath(); ctx.ellipse(0, -14 + bob * 0.3, 13, 7, 0, 0, Math.PI * 2); ctx.fill();
+  // pescoço e cabeça
+  ctx.beginPath(); ctx.moveTo(8, -18); ctx.lineTo(15, -28); ctx.lineTo(19, -26); ctx.lineTo(13, -12); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(19, -26, 6, 3.4, 0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = mane; ctx.fillRect(12, -29, 3, 12);
+  ctx.beginPath(); ctx.moveTo(-12, -15); ctx.quadraticCurveTo(-18, -10, -15, -2); ctx.lineTo(-13, -3); ctx.quadraticCurveTo(-15, -9, -11, -12); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.fillRect(18, -28, 1.5, 1.5);
+  ctx.fillStyle = coat; ctx.beginPath(); ctx.moveTo(15, -30); ctx.lineTo(16, -34); ctx.lineTo(18, -30); ctx.fill();
+  if (a.owned) { ctx.fillStyle = '#8a4a20'; ctx.fillRect(14, -27, 1.5, 4); ctx.fillRect(17, -24, 5, 1.2); } // cabresto
+  if (a.ridden) { ctx.fillStyle = '#5a2e14'; ctx.fillRect(-6, -22, 11, 5); ctx.fillStyle = '#8a4a20'; ctx.fillRect(-1, -17, 2, 7); }
+}
+
+// ---------- trator ----------
+function drawTractor(ctx, x, y, face) {
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(face, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0, 3, 20, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(-10, -6, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c8b030'; ctx.beginPath(); ctx.arc(-10, -6, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a8a3a'; ctx.fillRect(-12, -22, 26, 12); ctx.fillRect(2, -16, 16, 9);
+  ctx.fillStyle = '#2a6a2a'; ctx.fillRect(4, -14, 12, 1); ctx.fillRect(4, -11, 12, 1);
+  ctx.fillStyle = '#555'; ctx.fillRect(12, -27, 2.5, 9);
+  ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.arc(11, -3, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c8b030'; ctx.beginPath(); ctx.arc(11, -3, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-14, -25, 3, 4);
+  ctx.restore();
+}
+
+// ---------- gente ----------
+const PAL_PLAYER = { shirt: '#b8362e', stripe: '#8a2420', pants: '#4a5a7a', hat: 'palha' };
+const PAL_WORKER = [
+  { shirt: '#3a6ab0', stripe: '#2a4a80', pants: '#5a4a3a', hat: 'bone', cap: '#d8d0b0' },
+  { shirt: '#5a8a3a', stripe: '#3a6a2a', pants: '#3a3a4a', hat: 'bone', cap: '#c83a2a' },
+  { shirt: '#d8a030', stripe: '#a87820', pants: '#4a5a7a', hat: 'palha' },
+];
+// seated = deslocamento vertical quando está montado (sem pernas andando)
+function drawFarmer(ctx, f, pal, toolId, seated = 0, label = null) {
+  const x = Math.round(f.x * T), y = Math.round(f.y * T);
+  const dir = Math.abs(f.fx) > Math.abs(f.fy) ? (f.fx > 0 ? 'r' : 'l') : (f.fy < 0 ? 'u' : 'd');
+  const walk = f.moving && !seated ? Math.sin(f.step) : 0;
+  const bob = f.moving && !seated ? Math.abs(Math.sin(f.step)) * 1.2 : 0;
+  ctx.save(); ctx.translate(x, y + seated);
+  ctx.fillStyle = pal.pants;
+  if (seated) { ctx.fillRect(-5, -9, 3, 7); ctx.fillRect(2, -9, 3, 7); }
+  else {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0, 2, 8, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = pal.pants;
+    ctx.fillRect(-4, -8, 3, 8 + walk * 1.5); ctx.fillRect(1, -8, 3, 8 - walk * 1.5);
+    ctx.fillStyle = '#3a2618'; ctx.fillRect(-4, -1 + walk * 1.5, 3, 2); ctx.fillRect(1, -1 - walk * 1.5, 3, 2);
+  }
   ctx.translate(0, -bob);
-  ctx.fillStyle = '#b8362e'; ctx.fillRect(-6, -19, 12, 12);
-  ctx.fillStyle = '#8a2420'; ctx.fillRect(-6, -15, 12, 1); ctx.fillRect(-6, -11, 12, 1); ctx.fillRect(-2, -19, 1, 12); ctx.fillRect(2, -19, 1, 12);
+  ctx.fillStyle = pal.shirt; ctx.fillRect(-6, -19, 12, 12);
+  ctx.fillStyle = pal.stripe; ctx.fillRect(-6, -15, 12, 1); ctx.fillRect(-6, -11, 12, 1); ctx.fillRect(-2, -19, 1, 12); ctx.fillRect(2, -19, 1, 12);
   ctx.fillStyle = '#5a3a20'; ctx.fillRect(-6, -9, 12, 2);
-  // braços
   ctx.fillStyle = '#e0a878';
   if (dir === 'l' || dir === 'r') {
     const s = dir === 'r' ? 1 : -1;
     ctx.fillRect(s * 2 - 1.5, -17 + walk, 3, 8);
-    drawTool(ctx, g, s * 3, -9 + walk, s);
+    drawTool(ctx, toolId, s * 3, -9 + walk, s);
   } else {
     ctx.fillRect(-8, -17 - walk, 2.5, 8); ctx.fillRect(5.5, -17 + walk, 2.5, 8);
-    if (dir === 'd') drawTool(ctx, g, 7, -9 + walk, 1);
+    if (dir === 'd') drawTool(ctx, toolId, 7, -9 + walk, 1);
   }
-  // cabeça
   ctx.fillStyle = '#e8b088'; ctx.fillRect(-4, -26, 8, 7);
   if (dir !== 'u') {
     ctx.fillStyle = '#2a1a10';
     if (dir === 'd') { ctx.fillRect(-2.5, -23, 1.5, 1.5); ctx.fillRect(1, -23, 1.5, 1.5); ctx.fillStyle = '#7a4a2a'; ctx.fillRect(-2, -20.5, 4, 1); }
     else ctx.fillRect(dir === 'r' ? 1.5 : -3, -23, 1.5, 1.5);
   }
-  // chapéu de palha
-  ctx.fillStyle = '#d8b860'; ctx.beginPath(); ctx.ellipse(0, -26, 9.5, 3.2, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#e8cc78'; ctx.fillRect(-5, -31, 10, 5);
-  ctx.fillStyle = '#8a3a2a'; ctx.fillRect(-5, -27.5, 10, 1.5);
-  if (dir === 'u') drawTool(ctx, g, -7, -10, -1);
+  if (pal.hat === 'palha') {
+    ctx.fillStyle = '#d8b860'; ctx.beginPath(); ctx.ellipse(0, -26, 9.5, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8cc78'; ctx.fillRect(-5, -31, 10, 5);
+    ctx.fillStyle = '#8a3a2a'; ctx.fillRect(-5, -27.5, 10, 1.5);
+  } else {
+    ctx.fillStyle = pal.cap; ctx.fillRect(-4.5, -29, 9, 4);
+    if (dir === 'd') ctx.fillRect(-4, -26, 8, 1.5);
+    else if (dir === 'r') ctx.fillRect(2, -26, 5, 1.5);
+    else if (dir === 'l') ctx.fillRect(-7, -26, 5, 1.5);
+  }
+  if (dir === 'u') drawTool(ctx, toolId, -7, -10, -1);
   ctx.restore();
-  if (p.sneak) { ctx.font = '9px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('🤫', x, y - 36); }
+  if (label) {
+    ctx.font = '7px system-ui, sans-serif'; ctx.textAlign = 'center';
+    const tw = ctx.measureText(label).width + 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x - tw / 2, y - 44, tw, 10);
+    ctx.fillStyle = '#fff'; ctx.fillText(label, x, y - 36.5);
+  }
 }
-function drawTool(ctx, g, x, y, s) {
-  const id = ['mao', 'enxada', 'machado', 'regador', 'plantar', 'construir', 'laco', 'adubo'][g.player.tool];
+
+const TOOL_IDS = ['mao', 'enxada', 'machado', 'regador', 'plantar', 'construir', 'laco', 'adubo'];
+function drawPlayer(ctx, g, now) {
+  const p = g.player;
+  const tool = TOOL_IDS[p.tool];
+  if (p.mount?.kind === 'cavalo') {
+    const h = g.animals.find(a => a.id === p.mount.id);
+    if (h) {
+      h.x = p.x; h.y = p.y; h.face = p.fx >= 0 ? 1 : -1;
+      if (p.moving) h.step = p.step * 1.4;
+      drawAnimal(ctx, h, now, false);
+      const side = Math.abs(p.fx) < 0.2;
+      drawFarmer(ctx, { ...p, fx: side ? h.face : p.fx, fy: side ? 0 : p.fy }, PAL_PLAYER, tool, -13);
+      return;
+    }
+  }
+  if (p.mount?.kind === 'trator') {
+    const face = p.fx >= 0 ? 1 : -1;
+    drawTractor(ctx, p.x * T, p.y * T, face);
+    drawFarmer(ctx, { ...p, x: p.x - face * 0.12, fx: face, fy: 0 }, PAL_PLAYER, tool, -11);
+    return;
+  }
+  drawFarmer(ctx, p, PAL_PLAYER, tool);
+  if (p.sneak) { ctx.font = '9px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('🤫', p.x * T, p.y * T - 36); }
+}
+function drawWorker(ctx, k) {
+  const tool = { regar: 'regador', colher: 'mao', tratar: 'regador' }[k.task];
+  drawFarmer(ctx, k, PAL_WORKER[k.id % PAL_WORKER.length], tool, 0, k.name);
+}
+function drawTool(ctx, id, x, y, s) {
   ctx.save(); ctx.translate(x, y); ctx.scale(s, 1);
   switch (id) {
     case 'enxada': ctx.fillStyle = '#8a6038'; ctx.fillRect(0, -10, 1.5, 14); ctx.fillStyle = '#9aa0a8'; ctx.fillRect(-1, 3, 5, 2); break;

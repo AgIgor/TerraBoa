@@ -1,10 +1,11 @@
 // Interface em HTML: topo, inventário, barra de ferramentas, dica e janelas.
-import { TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, CROPS, CROP_LIST, ANIMALS, G, O, REGADOR_MAX, YEAR_DAYS, SEASONS, TROUGH_MAX, FEEDER_MAX } from './config.js';
+import { TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, CROPS, CROP_LIST, ANIMALS, G, O, REGADOR_MAX, YEAR_DAYS, SEASONS, TROUGH_MAX, FEEDER_MAX, WAGE, MAX_WORKERS, WORK_TASKS, DIESEL_PER_TILE } from './config.js';
 import { COMMODITIES, SELLABLE, INPUTS, price, inputPrice, sell, trend } from './market.js';
 import { dateText, clockText, hourOf, dayOf } from './game.js';
 import { tempAt, weatherLabel, weatherIcon, ENSO, seasonParams, EVENT_TEXT } from './climate.js';
-import { animalLabel, animalValue, isAdult, makeAnimal } from './animals.js';
-import { fTemp, cropStage } from './sim.js';
+import { animalLabel, animalValue, animalMarketQty, isAdult, makeAnimal } from './animals.js';
+import { fTemp, cropStage, storageCap, grainStock } from './sim.js';
+import { hireWorker, fireWorker } from './workers.js';
 
 const $ = id => document.getElementById(id);
 const fmt = v => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -13,7 +14,7 @@ const pct = v => Math.round(v * 100) + '%';
 const TOOL_ICON = { mao: '✋', enxada: '⛏️', machado: '🪓', regador: '🚿', plantar: '🌱', construir: '🔨', laco: '➰', adubo: '🧪' };
 const PLANT_ICON = { milho: '🌽', soja: '🫘', cana: '🎋', cafe: '☕', pimenta: '🌶️', capim: '🌾' };
 const GROUND_NAME = { [G.GRASS]: 'Campo nativo', [G.WATER]: 'Água', [G.SAND]: 'Areia', [G.DIRT]: 'Terra nua', [G.TILLED]: 'Terra arada', [G.PASTURE]: 'Pasto formado', [G.PATH]: 'Estrada', [G.YARD]: 'Terreiro' };
-const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa' };
+const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
 
 export class UI {
   constructor(game) {
@@ -120,18 +121,21 @@ export class UI {
     $('wxLabel').textContent = weatherLabel(today, h);
     // inventário
     const groups = [
-      ['Colheita', ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos']],
+      ['Colheita', ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'la']],
       ['Sementes e mudas', ['sem_milho', 'sem_soja', 'muda_cana', 'muda_cafe', 'muda_pimenta', 'sem_capim']],
-      ['Material', ['madeira', 'adubo', 'racao', 'bebedouro', 'aspersor']],
+      ['Material', ['madeira', 'adubo', 'racao', 'bebedouro', 'aspersor', 'silo']],
     ];
     let html = '';
     for (const [title, ids] of groups) {
       const rows = ids.filter(id => g.inv[id] > 0).map(id => `<div><span>${ITEMS[id].name}</span><b>${g.inv[id]} ${ITEMS[id].unit}</b></div>`);
       html += `<h4>${title}</h4>` + (rows.length ? rows.join('') : '<div class="empty">nada</div>');
     }
+    const cap = storageCap(g.world), st = grainStock(g);
+    html += `<h4>Armazém de grãos</h4><div><span>Sacas</span><b class="${st > cap ? 'down' : ''}">${st} / ${cap}</b></div>`;
+    if (g.workers.length) html += '<h4>Peões</h4>' + g.workers.map(k => `<div><span>${k.name}</span><b>${k.status || ''}</b></div>`).join('');
     const own = g.animals.filter(a => a.owned);
     if (own.length) {
-      html += '<h4>Rebanho</h4>' + ['gado', 'porco', 'galinha'].map(sp => {
+      html += '<h4>Rebanho</h4>' + Object.keys(ANIMALS).map(sp => {
         const n = own.filter(a => a.sp === sp).length;
         return n ? `<div><span>${ANIMALS[sp].name}</span><b>${n}</b></div>` : '';
       }).join('');
@@ -204,7 +208,7 @@ export class UI {
     const g = this.g;
     const tabs = {
       mercado: [['vender', 'Vender'], ['insumos', 'Comprar insumos'], ['animais', 'Animais'], ['noticias', 'Notícias']],
-      fazenda: [['animais', 'Rebanho'], ['lavouras', 'Lavouras'], ['diario', 'Diário']],
+      fazenda: [['animais', 'Rebanho'], ['lavouras', 'Lavouras'], ['peoes', 'Peões'], ['diario', 'Diário']],
       tempo: [['previsao', 'Previsão'], ['calendario', 'Calendário de plantio']],
       menu: [['ajuda', 'Como jogar'], ['jogo', 'Jogo']],
     }[this.panel];
@@ -240,8 +244,8 @@ export class UI {
       const a = g.animals.find(x => x.id === +ds.id);
       if (!a) return;
       const v = animalValue(g, a);
-      const key = a.sp === 'gado' ? 'boi' : a.sp === 'porco' ? 'porco' : 'frango';
-      sell(m, key, a.sp === 'gado' ? Math.round(a.weight / 15) : a.sp === 'porco' ? Math.round(a.weight) : 1);
+      if (a.ridden) return this.toast('Desça do cavalo antes de vender.', 'bad');
+      sell(m, ANIMALS[a.sp].market, animalMarketQty(a));
       if (g.player.led === a.id) g.player.led = null;
       g.animals = g.animals.filter(x => x !== a);
       g.money += v; g.stats.earned += v;
@@ -257,6 +261,24 @@ export class UI {
       g.money -= v; g.stats.spent += v;
       this.toast(`Comprou ${o.name.toLowerCase()}. Leve no laço até o pasto e solte com o Laço.`, 'good');
       this.close(); return;
+    } else if (act === 'buyt') {
+      const v = tractorPrice(g);
+      if (g.money < v) return this.toast('Dinheiro insuficiente.', 'bad');
+      const p = g.player;
+      g.vehicles.push({ id: g.nextId++, kind: 'trator', x: p.x + 1.2, y: p.y + 0.3, fx: 1 });
+      g.money -= v; g.stats.spent += v;
+      this.toast('Trator entregue ao seu lado. Chegue perto e aperte X (ou mão) para subir.', 'good');
+      this.close(); return;
+    } else if (act === 'hire') {
+      const k = hireWorker(g, ds.task || 'colher');
+      if (k) this.toast(`${k.name} foi contratado (R$ ${WAGE}/dia).`, 'good');
+    } else if (act === 'task') {
+      const k = g.workers.find(k => k.id === +ds.id);
+      if (k) { k.task = ds.task; k.path = []; k.job = null; k.timer = 0; }
+    } else if (act === 'fire') {
+      const k = g.workers.find(k => k.id === +ds.id);
+      fireWorker(g, +ds.id);
+      if (k) this.toast(`${k.name} foi dispensado.`);
     } else if (act === 'save') { this.onSave && this.onSave(); this.toast('Jogo salvo.', 'good'); }
     else if (act === 'new') {
       if (ds.confirm === '1') { this.onNew && this.onNew(); this.close(); return; }
@@ -309,11 +331,13 @@ export class UI {
       <td><div class="btns"><button data-act="sella" data-id="${a.id}" ${dis}>Vender</button></div></td></tr>`).join('');
     const offers = ANIMAL_OFFERS.map((o, i) => `<tr><td>${o.name}</td><td class="num">${o.sp === 'galinha' ? '' : o.w + ' kg'}</td><td class="num">${fmt(offerPrice(g, o))}</td>
       <td><div class="btns"><button data-act="buya" data-i="${i}" ${dis || (g.money >= offerPrice(g, o) ? '' : 'disabled')}>Comprar</button></div></td></tr>`).join('');
-    const quotes = ['boi', 'porco', 'frango'].map(id => `${COMMODITIES[id].name}: <b>${fmt(price(m, id))}</b>/${COMMODITIES[id].unit} <span class="${trend(m, id) >= 0 ? 'up' : 'down'}">${trend(m, id) >= 0 ? '▲' : '▼'}${Math.abs(trend(m, id) * 100).toFixed(1)}%</span>`).join(' · ');
+    const quotes = ['boi', 'porco', 'frango', 'cavalo', 'cordeiro', 'caprino'].map(id => `${COMMODITIES[id].name}: <b>${fmt(price(m, id))}</b>/${COMMODITIES[id].unit} <span class="${trend(m, id) >= 0 ? 'up' : 'down'}">${trend(m, id) >= 0 ? '▲' : '▼'}${Math.abs(trend(m, id) * 100).toFixed(1)}%</span>`).join(' · ');
     return `<p class="note">${quotes}</p>
       <div class="grid2"><div><h3>Seu rebanho</h3>${own.length ? `<table class="mk"><tr><th>Animal</th><th class="num">Peso</th><th class="num">Saúde</th><th class="num">Vale</th><th></th></tr>${rows}</table>` : '<p class="note">Nenhum animal ainda. Laçe os soltos no campo ou compre aqui.</p>'}</div>
       <div><h3>Comprar</h3><table class="mk"><tr><th>Animal</th><th class="num">Peso</th><th class="num">Preço</th><th></th></tr>${offers}</table>
-      <p class="note">O animal comprado sai daqui no laço com você.</p></div></div>`;
+      <p class="note">O animal comprado sai daqui no laço com você.</p>
+      <h3 style="margin-top:14px">Máquinas</h3><table class="mk"><tr><td>🚜 Trator <span class="unit">ara, planta e aduba 3×3 · diesel ~R$ ${(DIESEL_PER_TILE * Math.exp(g.market.dollar || 0)).toFixed(2)}/tile</span></td><td class="num">${fmt(tractorPrice(g))}</td>
+      <td><div class="btns"><button data-act="buyt" ${dis || (g.money >= tractorPrice(g) ? '' : 'disabled')}>Comprar</button></div></td></tr></table></div></div>`;
   }
   tab_mercado_noticias(g) {
     const items = g.market.news.map(n => {
@@ -367,7 +391,7 @@ export class UI {
     if (!own.length) return '<p class="note">Nenhum animal ainda. Cerque um pasto (cerca + porteira), ponha água (bebedouro ou beira de rio) e laçe os bichos soltos (ferramenta 7). Ande devagar segurando Shift para chegar perto sem espantar.</p>';
     const rows = own.sort((a, b) => a.sp.localeCompare(b.sp)).map(a => `<tr><td>${animalLabel(a)} <span class="unit">#${a.id}</span></td><td class="num">${weightText(a)}</td>
       <td class="num">${bar(a.hunger)}</td><td class="num">${bar(a.thirst, '#4a92cf')}</td><td class="num">${bar(a.health, '#86d37a')}</td>
-      <td class="unit">${[a.preg ? `prenhe (${a.preg} d)` : '', a.sp === 'gado' && a.sex === 'f' && a.milk >= 1 ? `${Math.floor(a.milk)} L p/ ordenhar` : '', a.comfort != null && a.comfort < 0.8 ? 'estresse térmico' : '', a.led ? 'no laço' : ''].filter(Boolean).join(' · ')}</td></tr>`).join('');
+      <td class="unit">${[a.preg ? `prenhe (${a.preg} d)` : '', ANIMALS[a.sp].milk && a.sex === 'f' && a.milk >= 1 ? `${Math.floor(a.milk)} L p/ ordenhar` : '', (a.wool || 0) >= 1 ? `${Math.floor(a.wool)} kg de lã` : '', a.ridden ? 'montado' : '', a.comfort != null && a.comfort < 0.8 ? 'estresse térmico' : '', a.led ? 'no laço' : ''].filter(Boolean).join(' · ')}</td></tr>`).join('');
     return `<table class="mk"><tr><th>Animal</th><th class="num">Peso</th><th class="num">Comida</th><th class="num">Água</th><th class="num">Saúde</th><th></th></tr>${rows}</table>`;
   }
   tab_fazenda_lavouras(g) {
@@ -390,6 +414,17 @@ export class UI {
       <div class="card"><h3>Resultados</h3><div class="kv"><span>Receita total</span><b>${fmt0(st.earned)}</b></div><div class="kv"><span>Gastos</span><b>${fmt0(st.spent)}</b></div>
       <div class="kv"><span>Plantas perdidas</span><b>${st.lost}</b></div>${Object.entries(st.harvested).map(([k, v]) => `<div class="kv"><span>${ITEMS[k].name} colhido</span><b>${v} ${ITEMS[k].unit}</b></div>`).join('')}</div></div>`;
   }
+  tab_fazenda_peoes(g) {
+    this.live = true;
+    const rows = g.workers.map(k => `<tr><td><b>${k.name}</b><br><span class="unit">${k.status || ''}</span></td>
+      <td><div class="btns" style="justify-content:flex-start">${Object.entries(WORK_TASKS).map(([id, t]) => `<button data-act="task" data-id="${k.id}" data-task="${id}" title="${t.hint}" ${k.task === id ? 'style="background:rgba(226,184,74,.35);border-color:#e2b84a"' : ''}>${t.name}</button>`).join('')}</div></td>
+      <td><div class="btns"><button data-act="fire" data-id="${k.id}">Dispensar</button></div></td></tr>`).join('');
+    const can = g.workers.length < MAX_WORKERS;
+    return `<p class="note">Cada peão ganha R$ ${WAGE} por dia, pago à meia-noite (sem dinheiro, ele vai embora). Trabalha das 6h às 17h. ${Object.values(WORK_TASKS).map(t => `<b>${t.name}:</b> ${t.hint}`).join(' ')}</p>
+      ${rows ? `<table class="mk"><tr><th>Peão</th><th>Tarefa</th><th></th></tr>${rows}</table>` : ''}
+      <p style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(WORK_TASKS).map(([id, t]) => `<button class="btn" data-act="hire" data-task="${id}" ${can ? '' : 'disabled'}>Contratar para ${t.name.toLowerCase()}</button>`).join('')}</p>
+      ${can ? '' : `<p class="note">Máximo de ${MAX_WORKERS} peões.</p>`}`;
+  }
   tab_fazenda_diario(g) {
     this.live = true;
     return `<div class="log">${g.log.map(l => `<div class="${l.kind}"><span class="unit">${clockText({ time: l.t })} · ${dateText({ time: l.t }).month}</span> ${l.text}</div>`).join('') || '<p class="note">Nada ainda.</p>'}</div>`;
@@ -402,6 +437,7 @@ export class UI {
       <p><b>Usar ferramenta:</b> clique no tile perto de você, ou <kbd>Espaço</kbd> no tile à frente. Arraste para arar, plantar ou cercar em fila.</p>
       <p><b>Mão rápida:</b> <kbd>E</kbd> colhe, ordenha, pega ovos, põe ração e fala com a cooperativa.</p>
       <p><b>Ferramentas:</b> <kbd>1</kbd>–<kbd>8</kbd>. <kbd>Q</kbd>/<kbd>R</kbd> trocam semente ou construção. Roda do mouse dá zoom.</p>
+      <p><b>Montar/descer:</b> <kbd>X</kbd> (cavalo ou trator).</p>
       <p><b>Janelas:</b> <kbd>M</kbd> mercado, <kbd>T</kbd> tempo, <kbd>F</kbd> fazenda, <kbd>L</kbd> mapas do solo, <kbd>P</kbd> pausa.</p>
       </div><div>
       <ul>
@@ -410,6 +446,10 @@ export class UI {
         <li><b>Animais:</b> feche um pasto com cerca e porteira, com água (bebedouro ou rio). Laçe os bichos soltos e solte no pasto. Macho e fêmea juntos dão cria.</li>
         <li><b>Mercado:</b> só na cooperativa. Guarde grãos para vender na entressafra; leite precisa ir no mesmo dia.</li>
         <li><b>Clima:</b> chuva e calor mudam a umidade; geada no inverno pode matar café e pimenta.</li>
+        <li><b>Cavalo:</b> laçe um (ou compre), solte no pasto e aperte <kbd>X</kbd> perto dele para montar. A cavalo você corre mais e laça melhor.</li>
+        <li><b>Ovelha e cabra:</b> tosquie a lã e ordenhe a cabra com a mão.</li>
+        <li><b>Armazém:</b> a casa guarda 40 sacas de grão. Paiol (+80) e silo (+400) evitam que a colheita estrague. Leite e cana estragam rápido.</li>
+        <li><b>Trator e peões:</b> o trator (cooperativa) faz 3×3 de uma vez; peões (janela Fazenda) regam, colhem e tratam dos bichos.</li>
         <li><b>Noite:</b> durma na casa (mão) depois das 19h. O jogo salva sozinho todo dia.</li>
       </ul></div></div>`;
   }
@@ -445,12 +485,15 @@ function animalInfo(g, a) {
   if (a.owned) {
     lines.push(`Comida ${bar(a.hunger)}`, `Água ${bar(a.thirst, '#4a92cf')}`, `Saúde ${bar(a.health, '#86d37a')}`);
     if (a.preg) lines.push(`Prenhe · nasce em ${a.preg} dias`);
-    if (a.sp === 'gado' && a.sex === 'f' && isAdult(a)) lines.push(a.milk >= 1 ? `${Math.floor(a.milk)} L para ordenhar (mão)` : '<span class="muted">já ordenhada</span>');
+    if (d.milk && a.sex === 'f' && isAdult(a)) lines.push(a.milk >= 1 ? `${Math.floor(a.milk)} L para ordenhar (mão)` : '<span class="muted">já ordenhada</span>');
+    if (d.wool) lines.push((a.wool || 0) >= 1 ? `${Math.floor(a.wool)} kg de lã para tosquiar (mão)` : `<span class="muted">lã crescendo (${(a.wool || 0).toFixed(1)} kg)</span>`);
+    if (a.sp === 'cavalo' && isAdult(a) && !a.ridden) lines.push('<span class="muted">X ou mão: montar</span>');
     lines.push(`<span class="muted">Vale ${fmt(animalValue(g, a))}</span>`);
   } else lines.push(`<span class="muted">Laço (7) para pegar · chance ${pct(d.catch)}</span>`);
   return lines.join('<br>');
 }
 
+function tractorPrice(g) { return 2600 * Math.exp(g.market.dollar || 0); }
 const ANIMAL_OFFERS = [
   { name: 'Bezerra (fêmea)', sp: 'gado', sex: 'f', w: 160 },
   { name: 'Garrote (macho)', sp: 'gado', sex: 'm', w: 180 },
@@ -458,12 +501,18 @@ const ANIMAL_OFFERS = [
   { name: 'Leitão', sp: 'porco', sex: 'm', w: 25 },
   { name: 'Franga', sp: 'galinha', sex: 'f', w: 1.3 },
   { name: 'Galo', sp: 'galinha', sex: 'm', w: 1.8 },
+  { name: 'Égua mansa', sp: 'cavalo', sex: 'f', w: 400 },
+  { name: 'Cavalo manso', sp: 'cavalo', sex: 'm', w: 420 },
+  { name: 'Ovelha', sp: 'ovelha', sex: 'f', w: 42 },
+  { name: 'Carneiro', sp: 'ovelha', sex: 'm', w: 50 },
+  { name: 'Cabra', sp: 'cabra', sex: 'f', w: 40 },
+  { name: 'Bode', sp: 'cabra', sex: 'm', w: 45 },
 ];
 function offerPrice(g, o) {
-  const m = g.market.c;
-  if (o.sp === 'gado') return o.w / 15 * m.boi.price * 1.3;
-  if (o.sp === 'porco') return o.w * m.porco.price * 1.8;
-  return m.frango.price * 1.15;
+  const d = ANIMALS[o.sp], p = g.market.c[d.market].price;
+  if (d.sell === 'arroba') return o.w / 15 * p * 1.3;
+  if (d.sell === 'kg') return o.w * p * 1.5;
+  return p * 1.15;
 }
 
 // Estima o ciclo plantando hoje usando o clima médio dos próximos dias.

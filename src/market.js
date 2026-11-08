@@ -14,8 +14,13 @@ export const COMMODITIES = {
   boi:     { name: 'Boi gordo', unit: 'arroba', base: 24,   amp: 0.09, peak: 2,  vol: 0.022, depth: 120, animal: true },
   porco:   { name: 'Suíno', unit: 'kg vivo', base: 2.6,  amp: 0.10, peak: 14, vol: 0.030, depth: 900, animal: true },
   frango:  { name: 'Galinha', unit: 'cabeça', base: 15,   amp: 0.06, peak: 14, vol: 0.020, depth: 60, animal: true },
+  leite_cabra: { name: 'Leite de cabra', unit: 'litro', base: 4.2, amp: 0.12, peak: 44, vol: 0.025, depth: 120 },
+  la:      { name: 'Lã', unit: 'kg', base: 9, amp: 0.14, peak: 34, vol: 0.035, depth: 80 },
+  cavalo:  { name: 'Cavalo', unit: 'cabeça', base: 950, amp: 0.05, peak: 0, vol: 0.020, depth: 8, animal: true },
+  cordeiro: { name: 'Cordeiro', unit: 'kg vivo', base: 5.5, amp: 0.10, peak: 22, vol: 0.030, depth: 400, animal: true },
+  caprino: { name: 'Cabrito', unit: 'kg vivo', base: 5, amp: 0.08, peak: 14, vol: 0.030, depth: 400, animal: true },
 };
-export const SELLABLE = ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos'];
+export const SELLABLE = ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'la'];
 
 // Insumos: preço ligado a uma commodity (semente cara quando o grão está caro).
 export const INPUTS = [
@@ -30,6 +35,7 @@ export const INPUTS = [
   { id: 'madeira', name: 'Madeira', pack: 10, fixed: 2.5 },
   { id: 'bebedouro', name: 'Bebedouro', pack: 1, fixed: 45 },
   { id: 'aspersor', name: 'Aspersor', pack: 1, fixed: 140, dollar: true },
+  { id: 'silo', name: 'Silo metálico (kit)', pack: 1, fixed: 1150, dollar: true },
 ];
 
 // Notícias aleatórias. p = chance por dia. fx = choque no log-preço.
@@ -47,6 +53,12 @@ const NEWS = [
   { p: 0.004, text: 'Gripe aviária fecha granjas: ovo e frango sobem', fx: { ovos: 0.22, frango: 0.15 } },
   { p: 0.006, text: 'Laticínios reduzem preço pago ao produtor', fx: { leite: -0.12 } },
   { p: 0.005, text: 'Indústria de ração compra milho em peso', fx: { milho: 0.10 } },
+  { p: 0.004, text: 'Indústria têxtil volta a comprar lã nacional', fx: { la: 0.18 } },
+  { p: 0.004, text: 'Lã importada do Uruguai derruba preço', fx: { la: -0.15 } },
+  { p: 0.004, text: 'Queijarias artesanais procuram leite de cabra', fx: { leite_cabra: 0.16, caprino: 0.05 } },
+  { p: 0.003, text: 'Festa de Páscoa aquece venda de cordeiro', fx: { cordeiro: 0.12 } },
+  { p: 0.003, text: 'Temporada de rodeios: cavalos valorizados', fx: { cavalo: 0.10 } },
+  { p: 0.004, text: 'Diesel sobe nas bombas', fx: { dollar: 0.05 } },
 ];
 
 function seasonal(c, doy) { return 1 + c.amp * Math.cos(2 * Math.PI * (doy - c.peak) / YEAR_DAYS); }
@@ -171,4 +183,14 @@ export function trend(m, id, days = 7) {
   if (h.length < 2) return 0;
   const a = h[Math.max(0, h.length - 1 - days)];
   return (m.c[id].price - a) / a;
+}
+
+// Saves antigos: cria as commodities que ainda não existiam.
+export function ensureMarket(m, day) {
+  for (const id in COMMODITIES) {
+    if (m.c[id]) continue;
+    m.c[id] = { x: 0, shock: 0, impact: 0, hist: [] };
+    m.c[id].price = calcPrice(m, id, day % YEAR_DAYS);
+    m.c[id].hist.push(m.c[id].price);
+  }
 }

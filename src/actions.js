@@ -1,7 +1,7 @@
 // O que cada ferramenta faz num tile. Retorna { ok, msg, kind, open } ou null.
 import {
   G, O, CROPS, TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, REGADOR_MAX, TROUGH_MAX, FEEDER_MAX,
-  FEED_VALUE, ANIMALS, LASSO_REACH,
+  FEED_VALUE, ANIMALS, LASSO_REACH, DIESEL_PER_TILE,
 } from './config.js';
 import { hourOf, sleep } from './game.js';
 import { animalLabel, settleAnimal, isAdult, startFlee } from './animals.js';
@@ -26,6 +26,16 @@ function addItem(g, id, n) { g.inv[id] = (g.inv[id] || 0) + n; }
 export function useTool(g, toolId, x, y, px = x + 0.5, py = y + 0.5) {
   const w = g.world;
   if (!w.inside(x, y)) return null;
+  const mount = g.player.mount;
+  if (mount?.kind === 'trator') {
+    if (['enxada', 'plantar', 'adubo'].includes(toolId)) return tractorWork(g, toolId, x, y);
+    if (toolId !== 'mao') return say('Do trator só dá para arar, plantar e adubar. Desça com X.', 'bad');
+  }
+  if (mount?.kind === 'cavalo' && ['enxada', 'plantar', 'construir', 'machado', 'adubo', 'regador'].includes(toolId)) return say('Desça do cavalo (X) para trabalhar a terra.', 'bad');
+  return useTool1(g, toolId, x, y, px, py);
+}
+
+function useTool1(g, toolId, x, y, px, py) {
   switch (toolId) {
     case 'mao': return hand(g, x, y, px, py);
     case 'enxada': return hoe(g, x, y);
@@ -53,14 +63,24 @@ function hand(g, x, y, px, py) {
   const e = w.drops.findIndex(d => d.x === x && d.y === y);
   if (e >= 0) { const n = w.drops[e].n; w.drops.splice(e, 1); addItem(g, 'ovos', n); return say(`+${n} ovos`, 'good'); }
 
-  // animal: ordenhar ou ver
+  // montar no trator ou no cavalo
+  const mt = mountAt(g, px, py);
+  if (mt) return mt;
+
+  // animal: ordenhar, tosquiar ou ver
   const a = animalAt(g, px, py, 0.8);
-  if (a) {
-    if (a.owned && a.sp === 'gado' && a.sex === 'f' && isAdult(a)) {
-      const l = Math.floor(a.milk);
-      if (l >= 1) { a.milk -= l; addItem(g, 'leite', l); return say(`Ordenhou ${l} L de leite`, 'good'); }
-      return say('A vaca já foi ordenhada. Volte amanhã.');
+  if (a && !a.ridden) {
+    const d = ANIMALS[a.sp];
+    if (a.owned && d.wool && (a.wool || 0) >= 1) {
+      const kg = Math.floor(a.wool); a.wool -= kg; addItem(g, 'la', kg);
+      return say(`Tosquiou ${kg} kg de lã`, 'good');
     }
+    if (a.owned && d.milk && a.sex === 'f' && isAdult(a)) {
+      const l = Math.floor(a.milk);
+      if (l >= 1) { a.milk -= l; addItem(g, d.milkItem, l); return say(`Ordenhou ${l} L de ${ITEMS[d.milkItem].name.toLowerCase()}`, 'good'); }
+      return say(`${animalLabel(a)} já foi ordenhada. Volte amanhã.`);
+    }
+    if (a.owned && d.wool) return say(`${animalLabel(a)}: lã ainda curta (${(a.wool || 0).toFixed(1)} kg)`);
     return say(`${animalLabel(a)}${a.owned ? '' : ' (solto)'}`, 'info', { inspect: a });
   }
 
@@ -83,18 +103,75 @@ function hand(g, x, y, px, py) {
     const d = CROPS[c.type];
     if (c.dead) { w.crops.delete(i); return say('Limpou a planta morta'); }
     if (!c.ripe) return say(`${d.name}: ${Math.round(c.prog * 100)}% crescida`);
-    const fert = w.fert[i];
-    const base = g.rng.range(d.yield[0], d.yield[1] + 0.99);
-    const n = Math.max(1, Math.floor(base * (0.35 + 0.65 * c.health) * (0.55 + 0.6 * fert)));
-    addItem(g, d.item, n);
-    g.stats.harvested[d.item] = (g.stats.harvested[d.item] || 0) + n;
-    w.fert[i] = Math.max(0.05, Math.min(1, fert - d.fertUse));
-    c.harvests++;
-    if (d.regrow && c.harvests < d.maxHarvests) { c.ripe = false; c.prog = d.regrow; c.ripeH = 0; }
-    else { w.crops.delete(i); w.idle[i] = 0; }
+    const n = harvestCrop(g, i);
     return say(`+${n} ${ITEMS[d.item].unit} de ${d.name.toLowerCase()}`, 'good');
   }
   return null;
+}
+
+// Colhe a lavoura madura do tile i. Usado pelo jogador e pelos peões.
+export function harvestCrop(g, i) {
+  const w = g.world, c = w.crops.get(i), d = CROPS[c.type];
+  const fert = w.fert[i];
+  const base = g.rng.range(d.yield[0], d.yield[1] + 0.99);
+  const n = Math.max(1, Math.floor(base * (0.35 + 0.65 * c.health) * (0.55 + 0.6 * fert)));
+  addItem(g, d.item, n);
+  g.stats.harvested[d.item] = (g.stats.harvested[d.item] || 0) + n;
+  w.fert[i] = Math.max(0.05, Math.min(1, fert - d.fertUse));
+  c.harvests++;
+  if (d.regrow && c.harvests < d.maxHarvests) { c.ripe = false; c.prog = d.regrow; c.ripeH = 0; }
+  else { w.crops.delete(i); w.idle[i] = 0; }
+  return n;
+}
+
+// Trator: trabalha um quadrado 3x3 e gasta diesel por tile.
+function tractorWork(g, toolId, x, y) {
+  const w = g.world;
+  let n = 0, last = null;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!w.inside(x + dx, y + dy)) continue;
+    const r = useTool1(g, toolId, x + dx, y + dy, x + dx + 0.5, y + dy + 0.5);
+    if (r && r.ok) n++;
+    else if (r && r.kind === 'bad') last = r;
+  }
+  if (!n) return last || null;
+  const cost = n * DIESEL_PER_TILE * Math.exp(g.market.dollar || 0);
+  g.money -= cost; g.stats.spent += cost;
+  return say('');
+}
+
+export function mountAt(g, px, py) {
+  const p = g.player;
+  if (p.mount) return null;
+  const v = (g.vehicles || []).find(v => Math.hypot(v.x - px, v.y - py) < 1.1);
+  if (v) { p.mount = { kind: 'trator', id: v.id }; p.x = v.x; p.y = v.y; return say('No trator: arar, plantar e adubar fazem 3×3. X desce.', 'good'); }
+  const a = animalAt(g, px, py, 0.9);
+  if (a && a.sp === 'cavalo' && a.owned && !a.led && isAdult(a)) {
+    if (p.led != null) return say('Solte o animal do laço antes de montar.', 'bad');
+    a.ridden = true; a.path = []; p.mount = { kind: 'cavalo', id: a.id }; p.x = a.x; p.y = a.y;
+    return say(`Montou ${a.sex === 'f' ? 'na égua' : 'no cavalo'}. X desce.`, 'good');
+  }
+  return null;
+}
+
+export function dismount(g) {
+  const p = g.player, m = p.mount, w = g.world;
+  if (!m) return null;
+  // procura um lugar livre do lado para descer
+  let spot = null;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+    if (w.walkablePlayer(Math.floor(p.x + dx), Math.floor(p.y + dy))) { spot = [Math.floor(p.x + dx) + 0.5, Math.floor(p.y + dy) + 0.5]; break; }
+  }
+  if (!spot) return say('Sem espaço para descer aqui.', 'bad');
+  if (m.kind === 'cavalo') {
+    const a = g.animals.find(a => a.id === m.id);
+    if (a) { a.ridden = false; a.x = p.x; a.y = p.y; settleAnimal(w, a); }
+  } else {
+    const v = g.vehicles.find(v => v.id === m.id);
+    if (v) { v.x = p.x; v.y = p.y; v.fx = p.fx; }
+  }
+  p.mount = null; p.x = spot[0]; p.y = spot[1];
+  return say('Desceu.');
 }
 
 function hoe(g, x, y) {
@@ -127,7 +204,7 @@ function axe(g, x, y) {
     return say('+4 madeira', 'good');
   }
   if (o === O.BUSH) { w.obj[i] = O.NONE; w.dirty = true; addItem(g, 'madeira', 1); return say('+1 madeira', 'good'); }
-  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1] }[o];
+  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1] }[o];
   if (refund) {
     w.obj[i] = O.NONE; w.dirty = true;
     w.troughs.delete(i); w.feeders.delete(i); w.sprinklers.delete(i);
@@ -211,10 +288,11 @@ function lasso(g, x, y, px, py) {
     return say(`${animalLabel(led)} solto no pasto`, 'good');
   }
   const a = animalAt(g, px, py, 1.1);
-  if (!a) return say('Mire num animal.', 'bad');
+  if (!a || a.ridden) return say('Mire num animal.', 'bad');
   if (Math.hypot(a.x - p.x, a.y - p.y) > LASSO_REACH) return say('Longe demais para o laço.', 'bad');
   if (a.owned) { a.led = true; a.path = []; p.led = a.id; return say(`Levando ${animalLabel(a).toLowerCase()}`); }
-  const chance = ANIMALS[a.sp].catch * (p.sneak ? 1.25 : 1) * (a.fleeing > 0 ? 0.6 : 1);
+  const onHorse = p.mount?.kind === 'cavalo';
+  const chance = Math.min(0.95, ANIMALS[a.sp].catch * (p.sneak ? 1.25 : 1) * (onHorse ? 1.45 : 1) * (a.fleeing > 0 && !onHorse ? 0.6 : 1));
   if (g.rng.chance(chance)) {
     a.led = true; a.path = []; a.fleeing = 0; p.led = a.id;
     const lb = animalLabel(a).toLowerCase();

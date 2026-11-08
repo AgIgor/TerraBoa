@@ -29,7 +29,7 @@ export const isAdult = a => a.weight >= ANIMALS[a.sp].adultW * 0.85;
 // Rebanhos selvagens espalhados pelo mapa, longe da sede.
 export function spawnWild(g, count = null) {
   const w = g.world, r = g.rng;
-  const groups = count || [['gado', 3, 4], ['gado', 2, 3], ['gado', 3, 4], ['porco', 2, 4], ['porco', 2, 3], ['galinha', 3, 5], ['galinha', 2, 4], ['galinha', 2, 3]];
+  const groups = count || [['gado', 3, 4], ['gado', 2, 3], ['gado', 3, 4], ['porco', 2, 4], ['porco', 2, 3], ['galinha', 3, 5], ['galinha', 2, 4], ['galinha', 2, 3], ['cavalo', 2, 3], ['cavalo', 2, 3], ['ovelha', 3, 5], ['cabra', 2, 4]];
   for (const [sp, a, b] of groups) {
     for (let tries = 0; tries < 300; tries++) {
       const x = r.int(3, w.w - 4), y = r.int(3, w.h - 4);
@@ -88,6 +88,7 @@ export function updateAnimals(g, dt) {
   const w = g.world, p = g.player;
   for (const a of g.animals) {
     const d = ANIMALS[a.sp];
+    if (a.ridden) { a.x = p.x; a.y = p.y + 0.01; a.face = p.fx >= 0 ? 1 : -1; if (p.moving) a.step += dt * 9; continue; }
     if (a.led) {
       const tx = p.x - p.fx * 0.9, ty = p.y - p.fy * 0.9;
       const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
@@ -182,7 +183,7 @@ function decide(g, a) {
 export function animalsHour(g, hour) {
   const w = g.world;
   for (const a of g.animals) {
-    if (a.led) { a.hunger = Math.max(0, a.hunger - 1 / 30); a.thirst = Math.max(0, a.thirst - 1 / 30); continue; }
+    if (a.led || a.ridden) { a.hunger = Math.max(0, a.hunger - 1 / 30); a.thirst = Math.max(0, a.thirst - 1 / 30); continue; }
     const d = ANIMALS[a.sp];
     const [x, y] = tileOf(a);
     if (!w.inside(x, y)) continue;
@@ -274,12 +275,14 @@ export function animalsDay(g, today) {
     if (a.health > 0.7) a.warned = false;
 
     if (isAdult(a) && a.sex === 'f') {
-      if (a.sp === 'gado') a.milk = Math.min(18, a.milk + 8 * comfort * Math.min(1, fed * 1.3));
+      if (d.milk) a.milk = Math.min(d.milk * 2.2, a.milk + d.milk * comfort * Math.min(1, fed * 1.3));
       if (a.sp === 'galinha' && fed > 0.4 && w.inside(x, y)) {
         const n = Math.round(r.range(2, 5) * comfort * Math.min(1, fed * 1.2));
         if (n > 0) w.drops.push({ x, y, n, day: today.day });
       }
     }
+
+    if (d.wool && a.weight > d.adultW * 0.6 && fed > 0.4) a.wool = Math.min(5, (a.wool || 0) + d.wool * comfort);
 
     // gestação
     if (a.preg > 0) {
@@ -296,7 +299,8 @@ export function animalsDay(g, today) {
 
     // animal fora de cerca pode fugir
     const ci = w.inside(x, y) ? w.comp[w.idx(x, y)] : -1;
-    if (ci < 0 || w.compOpen.has(ci)) {
+    if (a.ridden || a.led) a.escape = 0;
+    else if (ci < 0 || w.compOpen.has(ci)) {
       a.escape++;
       if (a.escape >= 2 && r.chance(0.5)) {
         a.owned = false; a.escape = 0;
@@ -313,7 +317,7 @@ export function animalsDay(g, today) {
   // repovoamento lento da fauna selvagem
   const wild = g.animals.filter(a => !a.owned).length;
   if (wild < 12 && today.day % 6 === 0) {
-    const sp = r.pick(['gado', 'porco', 'galinha']);
+    const sp = r.pick(['gado', 'porco', 'galinha', 'cavalo', 'ovelha', 'cabra']);
     spawnWild(g, [[sp, 2, 3]]);
   }
 }
@@ -328,10 +332,15 @@ function hasShade(w, x, y) {
 
 // Valor de venda do animal hoje
 export function animalValue(g, a) {
-  const m = g.market.c;
-  if (a.sp === 'gado') return (a.weight / 15) * m.boi.price * (a.health * 0.3 + 0.7);
-  if (a.sp === 'porco') return a.weight * m.porco.price * (a.health * 0.3 + 0.7);
-  return m.frango.price * Math.min(1, a.weight / ANIMALS.galinha.adultW) * (a.health * 0.3 + 0.7);
+  const d = ANIMALS[a.sp], price = g.market.c[d.market].price, hf = a.health * 0.3 + 0.7;
+  if (d.sell === 'arroba') return (a.weight / 15) * price * hf;
+  if (d.sell === 'kg') return a.weight * price * hf;
+  return price * Math.min(1, a.weight / d.adultW) * hf;
+}
+// Quantidade que entra no mercado ao vender o animal (para a pressão de preço)
+export function animalMarketQty(a) {
+  const d = ANIMALS[a.sp];
+  return d.sell === 'arroba' ? Math.round(a.weight / 15) : d.sell === 'kg' ? Math.round(a.weight) : 1;
 }
 
 // Larga o animal no tile livre mais perto do ponto.

@@ -1,8 +1,9 @@
 // Liga tudo: jogo, desenho, interface e controles.
-import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC } from './config.js';
-import { newGame, advance, serialize, deserialize, dayOf, SAVE_KEY } from './game.js';
+import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED } from './config.js';
+import { newGame, advance, serialize, deserialize, dayOf, hourOf, SAVE_KEY } from './game.js';
 import { updateAnimals } from './animals.js';
-import { useTool, animalAt, ledAnimal } from './actions.js';
+import { useTool, animalAt, ledAnimal, mountAt, dismount } from './actions.js';
+import { updateWorkers } from './workers.js';
 import { Renderer } from './render.js';
 import { UI } from './ui.js';
 
@@ -63,6 +64,7 @@ addEventListener('keydown', e => {
   else if (k === 'h') ui.open('menu');
   else if (k === 'l') cycleOverlay();
   else if (k === 'p') ui.setSpeed(0);
+  else if (k === 'x') toggleMount();
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
@@ -98,6 +100,21 @@ function joyMove(e) {
 }
 document.getElementById('tUse').onclick = () => act(TOOLS[g.player.tool].id, true);
 document.getElementById('tHand').onclick = () => act('mao', true);
+document.getElementById('tMount').onclick = () => toggleMount();
+
+function toggleMount() {
+  const p = g.player;
+  let r;
+  if (p.mount) r = dismount(g);
+  else {
+    // monta no trator ou cavalo mais perto
+    const cands = [...g.vehicles, ...g.animals.filter(a => a.sp === 'cavalo' && a.owned && !a.led)]
+      .map(o => [o, Math.hypot(o.x - p.x, o.y - p.y)]).filter(([, d]) => d < 2).sort((a, b) => a[1] - b[1]);
+    r = cands.length ? mountAt(g, cands[0][0].x, cands[0][0].y) : null;
+    if (!r) r = { msg: 'Nada para montar aqui. Chegue perto de um cavalo seu ou do trator.', kind: 'bad' };
+  }
+  if (r?.msg) ui.toast(r.msg, r.kind);
+}
 document.getElementById('layerBtn').onclick = cycleOverlay;
 
 const OVERLAYS = [null, 'umidade', 'fertilidade', 'capim'];
@@ -177,7 +194,8 @@ function movePlayer(dt) {
   if (l > 1) { mx /= l; my /= l; }
   p.fx = mx / Math.max(l, 1e-6); p.fy = my / Math.max(l, 1e-6);
   if (l <= 1) { const k = Math.hypot(p.fx, p.fy); p.fx /= k; p.fy /= k; }
-  const speed = p.sneak ? 1.7 : 4.2;
+  const speed = p.mount ? SPEED[p.mount.kind] : p.sneak ? SPEED.sneak : SPEED.walk;
+  if (p.mount) p.sneak = false;
   const sx = mx * speed * dt, sy = my * speed * dt;
   const free = (x, y) => {
     const r = 0.26;
@@ -189,7 +207,8 @@ function movePlayer(dt) {
   if (free(p.x, p.y + sy)) p.y += sy;
   p.x = Math.max(0.3, Math.min(w.w - 0.3, p.x));
   p.y = Math.max(0.3, Math.min(w.h - 0.2, p.y));
-  p.step += Math.hypot(sx, sy) * 5;
+  p.step += Math.hypot(sx, sy) * (p.mount ? 3 : 5);
+  if (p.mount?.kind === 'trator') { const v = g.vehicles.find(v => v.id === p.mount.id); if (v) { v.x = p.x; v.y = p.y; v.fx = p.fx; } }
   // pega ovos ao passar por cima
   const ex = Math.floor(p.x), ey = Math.floor(p.y);
   const e = w.drops.findIndex(d => d.x === ex && d.y === ey);
@@ -205,8 +224,9 @@ function frame(now) {
   const running = !g.paused && !ui.isOpen();
   if (running) {
     updateAnimals(g, dt * Math.sqrt(g.speed));
+    updateWorkers(g, dt * Math.sqrt(g.speed), hourOf(g));
     advance(g, dt * MIN_PER_SEC * g.speed);
-  } else if (!g.paused) updateAnimals(g, 0);
+  } else updateAnimals(g, 0);
   if (dayOf(g) !== lastDay) { lastDay = dayOf(g); save(); }
 
   // alvo e dica

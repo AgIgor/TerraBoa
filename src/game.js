@@ -3,8 +3,9 @@ import { MONTHS, YEAR_DAYS, DAYS_PER_SEASON, SEASONS, REGADOR_MAX } from './conf
 import { RNG } from './rng.js';
 import { generateWorld, worldToJSON, worldFromJSON } from './world.js';
 import { initClimate } from './climate.js';
-import { initMarket } from './market.js';
+import { initMarket, ensureMarket } from './market.js';
 import { spawnWild, updateAnimals } from './animals.js';
+import { updateWorkers } from './workers.js';
 import { hourly, daily } from './sim.js';
 
 export const SAVE_KEY = 'terraboa-save-v1';
@@ -18,10 +19,10 @@ export function newGame(seed = (Math.random() * 1e9) | 0) {
     speed: 1, paused: false,
     money: 600,
     inv: { sem_milho: 20, sem_capim: 30, madeira: 40, muda_pimenta: 4, adubo: 2 },
-    player: { x: world.spawn.x, y: world.spawn.y, fx: 0, fy: 1, tool: 0, plant: 0, build: 0, water: REGADOR_MAX, led: null, sneak: false, moving: false, step: 0 },
+    player: { x: world.spawn.x, y: world.spawn.y, fx: 0, fy: 1, tool: 0, plant: 0, build: 0, water: REGADOR_MAX, led: null, mount: null, sneak: false, moving: false, step: 0 },
     climate: initClimate(rng),
     market: initMarket(rng),
-    animals: [], nextId: 1,
+    animals: [], nextId: 1, workers: [], vehicles: [],
     flags: {}, stats: { days: 0, earned: 0, spent: 0, lost: 0, harvested: {} },
     log: [],
   };
@@ -73,6 +74,7 @@ export function advance(g, minutes) {
 export function advanceWithAnimals(g, minutes, stepMin = 2) {
   for (let t = 0; t < minutes; t += stepMin) {
     updateAnimals(g, stepMin / 10);
+    updateWorkers(g, stepMin / 10, hourOf(g));
     advance(g, Math.min(stepMin, minutes - t));
   }
 }
@@ -86,7 +88,11 @@ export function sleep(g) {
 // ---- salvar / carregar ----
 export function serialize(g) {
   const { rng, world, notify, onNotify, ...rest } = g;
-  return JSON.stringify({ ...rest, rngState: rng.s, world: worldToJSON(world), animals: g.animals.map(a => ({ ...a, path: [], led: false })) });
+  return JSON.stringify({
+    ...rest, rngState: rng.s, world: worldToJSON(world),
+    animals: g.animals.map(a => ({ ...a, path: [], led: false })),
+    workers: g.workers.map(k => ({ ...k, path: [], job: null, timer: 0 })),
+  });
 }
 
 export function deserialize(json) {
@@ -96,6 +102,9 @@ export function deserialize(json) {
   delete g.rngState;
   g.world = worldFromJSON(o.world);
   g.player.led = null;
+  g.workers ||= []; g.vehicles ||= [];
+  g.player.mount ||= null;
+  ensureMarket(g.market, dayOf(g));
   attach(g);
   return g;
 }

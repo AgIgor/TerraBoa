@@ -219,7 +219,7 @@ function axe(g, x, y) {
     return say('+4 madeira', 'good');
   }
   if (o === O.BUSH) { w.obj[i] = O.NONE; w.dirty = true; addItem(g, 'madeira', 1); return say('+1 madeira', 'good'); }
-  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1], [O.BRIDGE]: ['madeira', 4], [O.LAMP]: ['madeira', 2] }[o];
+  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1], [O.BRIDGE]: ['madeira', 4], [O.LAMP]: ['madeira', 2], [O.WELL]: ['madeira', 3] }[o];
   if (refund) {
     w.obj[i] = O.NONE; w.dirty = true;
     w.troughs.delete(i); w.feeders.delete(i); w.sprinklers.delete(i);
@@ -231,7 +231,7 @@ function axe(g, x, y) {
 
 function water(g, x, y) {
   const w = g.world, i = w.idx(x, y), p = g.player;
-  if (w.ground[i] === G.WATER) { p.water = REGADOR_MAX; return say('Regador cheio', 'good'); }
+  if (w.ground[i] === G.WATER || w.obj[i] === O.WELL) { p.water = REGADOR_MAX; return say(w.obj[i] === O.WELL ? 'Regador cheio no poço' : 'Regador cheio', 'good'); }
   if (w.fires.has(i)) {
     if (p.water <= 0) return say('Regador vazio! Encha na água para apagar o fogo.', 'bad');
     p.water--;
@@ -296,6 +296,7 @@ function build(g, x, y) {
     if (!w.nearWater(x, y, SPRINKLER.water)) return say(`Aspersor instalado, mas não há água a até ${SPRINKLER.water} tiles: ele não vai funcionar.`, 'bad');
     return say(`Aspersor ligado: molha 7×7 às ${SPRINKLER.hours.join('h, ')}h.`, 'good');
   }
+  if (b.obj === O.WELL) return say(`Poço pronto: aspersores a até ${SPRINKLER.water} tiles funcionam e dá para encher o regador nele.`, 'good');
   return say('');
 }
 

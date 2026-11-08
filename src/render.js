@@ -243,6 +243,22 @@ export class Renderer {
         ctx.fillStyle = '#6a7078'; ctx.fillRect(px + 22, py - 36, 2, 62);
         break;
       }
+      case O.WELL: {
+        ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(px + 16, py + 27, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
+        // mureta de pedra
+        ctx.fillStyle = '#8a8680'; ctx.fillRect(px + 4, py + 12, 24, 15);
+        ctx.fillStyle = '#a29e96'; for (let k = 0; k < 4; k++) ctx.fillRect(px + 5 + k * 6, py + 13 + (k % 2) * 6, 5, 4);
+        ctx.fillStyle = '#6e6a64'; ctx.fillRect(px + 4, py + 24, 24, 3);
+        ctx.fillStyle = '#c0bcb4'; ctx.fillRect(px + 3, py + 10, 26, 3);
+        ctx.fillStyle = '#2a4a66'; ctx.fillRect(px + 7, py + 11, 18, 2);
+        // suportes, telhadinho e balde
+        ctx.fillStyle = '#5a3a20'; ctx.fillRect(px + 5, py - 6, 3, 17); ctx.fillRect(px + 24, py - 6, 3, 17);
+        ctx.fillRect(px + 6, py - 3, 20, 2);
+        ctx.fillStyle = '#8a4a2a'; ctx.beginPath(); ctx.moveTo(px + 1, py - 4); ctx.lineTo(px + 16, py - 14); ctx.lineTo(px + 31, py - 4); ctx.fill();
+        ctx.fillStyle = '#ccc'; ctx.fillRect(px + 15.5, py - 1, 1, 6);
+        ctx.fillStyle = '#6a6e74'; ctx.fillRect(px + 13, py + 5, 7, 5);
+        break;
+      }
       case O.SPRINKLER: {
         ctx.fillStyle = '#5a5f66'; ctx.fillRect(px + 15, py + 10, 3, 18);
         ctx.fillStyle = '#c0c4c8'; ctx.fillRect(px + 12, py + 8, 9, 4);

@@ -11,7 +11,7 @@ export const MAX_FIRES = 500;
 // Quão fácil o tile pega fogo (0 = não queima: água, estrada, terra nua ou arada sem lavoura)
 export function flammability(w, i) {
   const gr = w.ground[i], o = w.obj[i];
-  if (gr === G.WATER || o === O.HOUSE || o === O.COOP || o === O.SILO || o === O.BRIDGE || o === O.TROUGH || o === O.SPRINKLER || o === O.ROCK) return 0;
+  if (gr === G.WATER || o === O.HOUSE || o === O.COOP || o === O.SILO || o === O.BRIDGE || o === O.TROUGH || o === O.SPRINKLER || o === O.ROCK || o === O.WELL) return 0;
   let f = BURNABLE_OBJ[o] || 0;
   const c = w.crops.get(i);
   if (c && !c.dead) f = Math.max(f, c.prog > 0.5 ? 0.6 : 0.25);

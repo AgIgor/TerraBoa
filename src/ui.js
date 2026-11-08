@@ -16,7 +16,7 @@ const pct = v => Math.round(v * 100) + '%';
 const TOOL_ICON = { mao: '✋', enxada: '⛏️', machado: '🪓', regador: '🚿', plantar: '🌱', construir: '🔨', laco: '➰', adubo: '🧪' };
 const PLANT_ICON = { milho: '🌽', soja: '🫘', cana: '🎋', cafe: '☕', pimenta: '🌶️', capim: '🌾' };
 const GROUND_NAME = { [G.GRASS]: 'Campo nativo', [G.WATER]: 'Água', [G.SAND]: 'Areia', [G.DIRT]: 'Terra nua', [G.TILLED]: 'Terra arada', [G.PASTURE]: 'Pasto formado', [G.PATH]: 'Estrada', [G.YARD]: 'Terreiro' };
-const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.BRIDGE]: 'Ponte', [O.LAMP]: 'Lampião', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
+const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.BRIDGE]: 'Ponte', [O.LAMP]: 'Lampião', [O.WELL]: 'Poço', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
 
 export class UI {
   constructor(game) {
@@ -133,7 +133,7 @@ export class UI {
     const groups = [
       ['Colheita', ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'la']],
       ['Sementes e mudas', ['sem_milho', 'sem_soja', 'muda_cana', 'muda_cafe', 'muda_pimenta', 'sem_capim']],
-      ['Material', ['madeira', 'adubo', 'racao', 'bebedouro', 'aspersor', 'silo']],
+      ['Material', ['madeira', 'adubo', 'racao', 'bebedouro', 'aspersor', 'poco', 'silo']],
     ];
     let html = '';
     for (const [title, ids] of groups) {
@@ -176,7 +176,8 @@ export class UI {
       let t = `<b>${OBJ_NAME[o]}</b>`;
       if (o === O.TROUGH) t += ` · água ${pct(w.troughs.get(i).water / TROUGH_MAX)}`;
       if (o === O.FEEDER) t += ` · ração ${pct(w.feeders.get(i).food / FEEDER_MAX)}`;
-      if (o === O.SPRINKLER) t += w.nearWater(x, y, 12) ? ' · molha 7×7 às 6h, 12h e 17h' : ' · <span class="down">sem água a até 12 tiles</span>';
+      if (o === O.SPRINKLER) t += w.nearWater(x, y, 12) ? ' · molha 7×7 às 6h, 12h e 17h' : ' · <span class="down">sem água a até 12 tiles (faça um poço)</span>';
+      if (o === O.WELL) t += ' · abastece aspersores a até 12 tiles e enche o regador';
       if (o === O.HOUSE) t += '<br><span class="muted">Mão: dormir (após 19h)</span>';
       if (o === O.COOP) t += '<br><span class="muted">Mão: vender e comprar</span>';
       lines.push(t);
@@ -597,6 +598,7 @@ export class UI {
         <li><b>Rio:</b> construa ponte (6 madeiras) em cima da água. Animais também passam.</li>
         <li><b>Fogo:</b> na seca longa pode pegar fogo no campo; o vento leva para leste. Terra arada, estrada e água fazem aceiro; o regador apaga e a chuva também.</li>
         <li><b>Noite:</b> o lampião (3 madeiras) ilumina em volta.</li>
+        <li><b>Longe do rio?</b> Compre um poço na cooperativa e construa: aspersores a até 12 tiles dele funcionam, e o regador enche nele.</li>
         <li><b>Arou no lugar errado?</b> Clique com a enxada na terra arada para desfazer.</li>
         <li><b>Noite:</b> durma na casa (mão) depois das 19h. O jogo salva sozinho todo dia.</li>
       </ul></div></div>`;

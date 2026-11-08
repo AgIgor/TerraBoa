@@ -13,6 +13,7 @@ const SHAPES = {
   [O.PAIOL]: [[0.04, 0.96, 0.3, 0.9]],
   [O.SILO]: [[0.06, 0.94, 0.2, 0.95]],
   [O.LAMP]: [[0.4, 0.6, 0.6, 0.88]],
+  [O.WELL]: [[0.12, 0.88, 0.4, 0.9]],
   [O.HOUSE]: FULL,
   [O.COOP]: FULL,
 };
@@ -86,7 +87,9 @@ export class World {
   nearWater(x, y, r = 1) {
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const nx = x + dx, ny = y + dy;
-      if (this.inside(nx, ny) && this.ground[this.idx(nx, ny)] === G.WATER) return true;
+      if (!this.inside(nx, ny)) continue;
+      const j = this.idx(nx, ny);
+      if (this.ground[j] === G.WATER || this.obj[j] === O.WELL) return true;
     }
     return false;
   }

@@ -37,6 +37,7 @@ export const INPUTS = [
   { id: 'bebedouro', name: 'Bebedouro', pack: 1, fixed: 45 },
   { id: 'aspersor', name: 'Aspersor', pack: 1, fixed: 90, dollar: true },
   { id: 'silo', name: 'Silo metálico (kit)', pack: 1, fixed: 1150, dollar: true },
+  { id: 'poco', name: 'Poço com bomba (perfuração)', pack: 1, fixed: 480 },
 ];
 
 // Notícias aleatórias. p = chance por dia. fx = choque no log-preço.

@@ -146,6 +146,7 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'escape') { if (ui.isOpen()) ui.close(); else if (R.overlay) setOverlay(null); return; }
   if (ui.isOpen() && !['m', 't', 'f', 'h'].includes(k)) return;
+  if (k === 'i') { ui.toggleInv(); return; }
   keys.add(k);
   if (k >= '1' && k <= '8') ui.selectTool(+k - 1);
   else if (k === 'q') ui.cycle(-1);

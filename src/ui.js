@@ -12,6 +12,7 @@ import { COMMANDS, runCommand, ANIMAL_OFFERS, offerPrice, tractorPrice } from '.
 import { sfx, soundOn, soundVol, setSound } from './sound.js';
 
 const NICK_KEY = 'terraboa-nome';
+const INV_KEY = 'terraboa-painel';
 const nick = () => { try { return localStorage.getItem(NICK_KEY) || ''; } catch { return ''; } };
 const setNick = v => { try { localStorage.setItem(NICK_KEY, v); } catch { /* sem storage */ } };
 
@@ -56,7 +57,23 @@ export class UI {
     $('mktBtn').onclick = () => this.open('mercado');
     $('farmBtn').onclick = () => this.open('fazenda');
     $('helpBtn').onclick = () => this.open('menu');
+    $('invBtn').onclick = () => this.toggleInv();
     this.lastInv = '';
+    // painel de estoque: lembra se o jogador fechou; no celular começa fechado
+    let invPref = null;
+    try { invPref = localStorage.getItem(INV_KEY); } catch { /* sem storage */ }
+    const small = matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+    this.toggleInv(invPref === null ? !small : invPref === '1', false);
+    // altura da barra do topo vira variável de CSS (ela quebra em duas linhas em tela estreita)
+    const hud = $('hud'), setHud = () => document.documentElement.style.setProperty('--hud-b', Math.round(hud.getBoundingClientRect().bottom) + 'px');
+    setHud();
+    if (window.ResizeObserver) new ResizeObserver(setHud).observe(hud);
+    addEventListener('resize', setHud);
+  }
+  toggleInv(show = document.body.classList.contains('noinv'), remember = true) {
+    document.body.classList.toggle('noinv', !show);
+    $('invBtn').classList.toggle('on', show);
+    if (remember) try { localStorage.setItem(INV_KEY, show ? '1' : '0'); } catch { /* sem storage */ }
   }
   setGame(g) { this.g = g; this.refreshTools(); }
 

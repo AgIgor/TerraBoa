@@ -16,12 +16,12 @@ export const G = { GRASS: 0, WATER: 1, SAND: 2, DIRT: 3, TILLED: 4, PASTURE: 5, 
 // Objetos sobre o chão
 export const O = {
   NONE: 0, TREE: 1, BUSH: 2, ROCK: 3, FENCE: 4, GATE: 5, TROUGH: 6, FEEDER: 7,
-  SPRINKLER: 8, HOUSE: 9, COOP: 10, PAIOL: 11, SILO: 12, BRIDGE: 13,
+  SPRINKLER: 8, HOUSE: 9, COOP: 10, PAIOL: 11, SILO: 12, BRIDGE: 13, LAMP: 14,
 };
 
 // O que bloqueia o jogador e os animais
-export const BLOCK_PLAYER = new Set([O.TREE, O.ROCK, O.FENCE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO]);
-export const BLOCK_ANIMAL = new Set([O.TREE, O.BUSH, O.ROCK, O.FENCE, O.GATE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO]);
+export const BLOCK_PLAYER = new Set([O.TREE, O.ROCK, O.FENCE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO, O.LAMP]);
+export const BLOCK_ANIMAL = new Set([O.TREE, O.BUSH, O.ROCK, O.FENCE, O.GATE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO, O.LAMP]);
 
 // Estações (hemisfério sul, clima de cerrado / sul de Minas). Começa na primavera (setembro).
 export const SEASONS = [
@@ -141,9 +141,9 @@ export const TOOLS = [
   { id: 'mao', name: 'Mão', key: '1', hint: 'Colher, ordenhar, pegar ovos, pôr ração no cocho, dormir' },
   { id: 'enxada', name: 'Enxada', key: '2', hint: 'Arar a terra (clicar em terra arada desfaz), arrancar arbustos, pedras e plantas mortas' },
   { id: 'machado', name: 'Machado', key: '3', hint: 'Cortar árvores (madeira) e desmontar cercas' },
-  { id: 'regador', name: 'Regador', key: '4', hint: 'Molhar a terra. Encha na água. Também enche o bebedouro' },
+  { id: 'regador', name: 'Regador', key: '4', hint: 'Molhar a terra e apagar fogo. Encha na água. Também enche o bebedouro' },
   { id: 'plantar', name: 'Plantar', key: '5', hint: 'Plantar na terra arada. Capim forma pasto' },
-  { id: 'construir', name: 'Construir', key: '6', hint: 'Cercas, porteiras, pontes, cocho, bebedouro, aspersor, paiol e silo' },
+  { id: 'construir', name: 'Construir', key: '6', hint: 'Cercas, porteiras, pontes, lampião, cocho, bebedouro, aspersor, paiol e silo' },
   { id: 'laco', name: 'Laço', key: '7', hint: 'Laçar animal e soltar no seu pasto cercado' },
   { id: 'adubo', name: 'Adubo', key: '8', hint: 'Recupera a fertilidade da terra' },
 ];
@@ -163,6 +163,7 @@ export const BUILD_LIST = [
   { id: 'aspersor', name: 'Aspersor', obj: O.SPRINKLER, cost: { aspersor: 1 } },
   { id: 'paiol', name: 'Paiol', obj: O.PAIOL, cost: { madeira: 25 } },
   { id: 'ponte', name: 'Ponte', obj: O.BRIDGE, cost: { madeira: 6 }, water: true },
+  { id: 'lampiao', name: 'Lampião', obj: O.LAMP, cost: { madeira: 3 } },
   { id: 'silo', name: 'Silo', obj: O.SILO, cost: { silo: 1 } },
 ];
 

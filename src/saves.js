@@ -1,58 +1,153 @@
-// Saves no navegador: um automático (o mesmo de antes) e 3 espaços manuais.
-// Cada save guarda um resumo à parte para listar sem abrir o arquivo inteiro.
-import { serialize, deserialize, dateText, SAVE_KEY } from './game.js';
+// Saves por fazenda: cada jogo tem um id e um nome, e o salvamento automático grava só na fazenda aberta.
+// Começar um jogo novo cria outra fazenda — nunca sobrescreve as existentes.
+import { serialize, deserialize, dateText } from './game.js';
 
-export const AUTO = SAVE_KEY;
-export const SLOTS = ['terraboa-slot-1', 'terraboa-slot-2', 'terraboa-slot-3'];
-const META = 'terraboa-meta';
+const PREFIX = 'terraboa-farm-';
+const INDEX = 'terraboa-farms';
+const LAST = 'terraboa-last';
+const LEGACY = [['terraboa-save-v1', 'Minha fazenda'], ['terraboa-slot-1', 'Espaço 1'], ['terraboa-slot-2', 'Espaço 2'], ['terraboa-slot-3', 'Espaço 3']];
 
-function readMeta() {
-  try { return JSON.parse(localStorage.getItem(META) || '{}'); } catch { return {}; }
-}
-function writeMeta(m) { try { localStorage.setItem(META, JSON.stringify(m)); } catch {} }
+const ls = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { localStorage.setItem(k, v); }, // pode lançar erro de cota
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+function readIndex() { try { return JSON.parse(ls.get(INDEX) || '{}'); } catch { return {}; } }
+function writeIndex(ix) { try { ls.set(INDEX, JSON.stringify(ix)); } catch (e) { console.warn('índice de saves', e); } }
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 export function summary(g) {
   const d = dateText(g);
-  const own = g.animals.filter(a => a.owned).length;
-  return { year: d.year, season: d.season, month: d.month, day: d.dayOfSeason, money: Math.round(g.money), animals: own, crops: g.world.crops.size, savedAt: Date.now(), seed: g.seed };
+  return {
+    year: d.year, season: d.season, month: d.month, day: d.dayOfSeason, money: Math.round(g.money),
+    animals: g.animals.filter(a => a.owned).length, crops: g.world.crops.size, seed: g.seed, days: g.stats.days,
+  };
 }
 
-export function saveTo(key, g) {
+// Grava a fazenda aberta. Retorna { ok, reason }.
+export function saveFarm(g, thumb) {
+  if (!g.farmId) return { ok: false, reason: 'sem fazenda' };
   try {
-    localStorage.setItem(key, serialize(g));
-    const m = readMeta(); m[key] = summary(g); writeMeta(m);
-    return true;
-  } catch (e) { console.warn('save falhou', e); return false; }
+    ls.set(PREFIX + g.farmId, serialize(g));
+  } catch (e) {
+    console.warn('save falhou', e);
+    return { ok: false, reason: 'O navegador está sem espaço para saves. Apague ou exporte alguma fazenda.' };
+  }
+  const ix = readIndex();
+  const old = ix[g.farmId] || { created: Date.now() };
+  ix[g.farmId] = { ...old, name: g.farmName || old.name || 'Fazenda', ...summary(g), savedAt: Date.now(), thumb: thumb || old.thumb };
+  writeIndex(ix);
+  ls.set(LAST, g.farmId);
+  return { ok: true };
 }
 
-export function loadFrom(key) {
+export function createFarm(g, name, thumb) {
+  g.farmId = newId();
+  g.farmName = (name || '').trim() || nextName();
+  return saveFarm(g, thumb);
+}
+
+export function loadFarm(id) {
+  const s = ls.get(PREFIX + id);
+  if (!s) return null;
   try {
-    const s = localStorage.getItem(key);
-    return s ? deserialize(s) : null;
+    const g = deserialize(s);
+    g.farmId = id;
+    g.farmName = readIndex()[id]?.name || g.farmName || 'Fazenda';
+    try { ls.set(LAST, id); } catch {}
+    return g;
   } catch (e) { console.warn('save inválido', e); return null; }
 }
 
-export function remove(key) {
-  try { localStorage.removeItem(key); } catch {}
-  const m = readMeta(); delete m[key]; writeMeta(m);
+export function listFarms() {
+  const ix = readIndex();
+  return Object.entries(ix)
+    .filter(([id]) => ls.get(PREFIX + id) != null)
+    .map(([id, m]) => ({ id, ...m }))
+    .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
 }
 
-export function has(key) { try { return !!localStorage.getItem(key); } catch { return false; } }
+export function lastId() {
+  const id = ls.get(LAST);
+  return id && ls.get(PREFIX + id) != null ? id : listFarms()[0]?.id || null;
+}
 
-// Lista com resumo. Saves antigos sem resumo são lidos uma vez para gerar o resumo.
-export function list() {
-  const m = readMeta();
-  const out = [];
-  for (const key of [AUTO, ...SLOTS]) {
-    if (!has(key)) { out.push({ key, empty: true }); continue; }
-    if (!m[key]) { const g = loadFrom(key); if (g) { m[key] = summary(g); m[key].savedAt = 0; writeMeta(m); } }
-    out.push({ key, ...(m[key] || {}) });
+export function deleteFarm(id) {
+  ls.del(PREFIX + id);
+  const ix = readIndex(); delete ix[id]; writeIndex(ix);
+  if (ls.get(LAST) === id) ls.del(LAST);
+}
+
+export function renameFarm(id, name) {
+  const ix = readIndex();
+  if (!ix[id]) return;
+  ix[id].name = name.trim() || ix[id].name;
+  writeIndex(ix);
+}
+
+// Cópia da fazenda (ponto de volta). Retorna o id novo ou null.
+export function duplicateFarm(id) {
+  const s = ls.get(PREFIX + id);
+  if (!s) return null;
+  const ix = readIndex();
+  const nid = newId();
+  try { ls.set(PREFIX + nid, s); } catch { return null; }
+  ix[nid] = { ...ix[id], name: `${ix[id]?.name || 'Fazenda'} (cópia)`, savedAt: Date.now(), created: Date.now() };
+  writeIndex(ix);
+  return nid;
+}
+
+// Arquivo para guardar fora do navegador ou levar para outro aparelho.
+export function exportFarm(id) {
+  const s = ls.get(PREFIX + id);
+  if (!s) return null;
+  const meta = readIndex()[id] || {};
+  const name = (meta.name || 'fazenda').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').toLowerCase();
+  return { filename: `terraboa-${name}.json`, text: JSON.stringify({ terraboa: 1, name: meta.name, save: JSON.parse(s) }) };
+}
+
+export function importFarm(text) {
+  let o;
+  try { o = JSON.parse(text); } catch { return { ok: false, reason: 'Arquivo inválido.' }; }
+  const saveObj = o.terraboa ? o.save : o; // aceita também o save cru
+  let g;
+  try { g = deserialize(JSON.stringify(saveObj)); } catch { return { ok: false, reason: 'Esse arquivo não é um save do Terra Boa.' }; }
+  const r = createFarm(g, `${o.name || 'Fazenda importada'}`);
+  return { ...r, id: g.farmId };
+}
+
+function nextName() {
+  const used = new Set(listFarms().map(f => f.name));
+  for (let k = 1; ; k++) { const n = `Fazenda ${k}`; if (!used.has(n)) return n; }
+}
+export const suggestName = nextName;
+
+// Uso aproximado do armazenamento (KB)
+export function storageKB() {
+  let n = 0;
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('terraboa')) n += (localStorage.getItem(k) || '').length; } } catch {}
+  return Math.round(n / 1024);
+}
+
+// Converte os saves do sistema antigo (automático + 3 espaços) em fazendas, uma vez.
+export function migrate() {
+  let lastFromAuto = null;
+  for (const [key, name] of LEGACY) {
+    const s = ls.get(key);
+    if (!s) continue;
+    let g;
+    try { g = deserialize(s); } catch { continue; }
+    const r = createFarm(g, name);
+    if (r.ok) {
+      ls.del(key);
+      if (key === LEGACY[0][0]) lastFromAuto = g.farmId;
+    }
   }
-  return out;
+  ls.del('terraboa-meta');
+  if (lastFromAuto) try { ls.set(LAST, lastFromAuto); } catch {}
 }
 
-export function describe(s) {
-  if (s.empty) return 'vazio';
-  const when = s.savedAt ? new Date(s.savedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-  return `Ano ${s.year} · ${s.season}, ${s.month} · R$ ${(s.money ?? 0).toLocaleString('pt-BR')} · ${s.animals ?? 0} animais${when ? ' · salvo ' + when : ''}`;
+export function describe(f) {
+  const when = f.savedAt ? new Date(f.savedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  return `Ano ${f.year} · ${f.season}, ${f.month} · R$ ${(f.money ?? 0).toLocaleString('pt-BR')} · ${f.animals ?? 0} animais${when ? ' · ' + when : ''}`;
 }

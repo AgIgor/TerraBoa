@@ -167,3 +167,22 @@ export function drawLeaves(ctx, vw, vh, dt, season) {
     ctx.save(); ctx.translate(l.x, l.y); ctx.rotate(l.r); ctx.fillStyle = l.c; ctx.fillRect(-3, -1.5, 6, 3); ctx.restore();
   }
 }
+
+// Granizo: pedrinhas brancas que caem rápido e quicam no chão.
+export function drawHail(ctx, vw, vh, on, dt) {
+  fx.hails = fx.hails || [];
+  const want = on ? 160 : 0;
+  while (fx.hails.length < want) fx.hails.push({ x: Math.random() * vw, y: Math.random() * vh, z: 0.5 + Math.random() * 0.5, g: vh * (0.15 + Math.random() * 0.85), b: 0 });
+  if (fx.hails.length > want) fx.hails.length = want;
+  ctx.fillStyle = 'rgba(240,246,255,0.9)';
+  for (const h of fx.hails) {
+    if (h.b > 0) { h.b -= dt; h.y -= 60 * dt; if (h.b <= 0) { h.x = Math.random() * (vw + 120) - 60; h.y = -20 - Math.random() * 60; h.g = vh * (0.15 + Math.random() * 0.85); } }
+    else { h.x += fx.wind * 200 * h.z * dt; h.y += 900 * h.z * dt; if (h.y > h.g) h.b = 0.12; }
+    ctx.beginPath(); ctx.arc(h.x, h.y, 1.4 + h.z, 0, Math.PI * 2); ctx.fill();
+  }
+}
+// brasas subindo do fogo
+export function ember(x, y) {
+  if (fx.parts.length > 650) return;
+  fx.parts.push({ x: x * T + (Math.random() - 0.5) * 20, y: y * T, z: 6 + Math.random() * 8, vx: fx.wind * 20 + (Math.random() - 0.5) * 20, vy: 0, vz: 30 + Math.random() * 30, life: 0.6 + Math.random() * 0.5, c: Math.random() < 0.5 ? '#ffb030' : '#ff6a20', s: 1.6, r: 0, slow: true });
+}

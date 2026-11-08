@@ -1,6 +1,7 @@
 // Simulação da terra: umidade, lavouras, capim, regeneração natural. Sem DOM.
 import { G, O, CROPS, ITEMS, GRASS_CAP, GRASS_RATE, TROUGH_MAX, YEAR_DAYS, GRAINS, STORE_BASE, STORE_ADD, SPOIL, SPRINKLER } from './config.js';
 import { workersDay } from './workers.js';
+import { fireDay, fireHour } from './fire.js';
 import { tempAt, rainAt, climateNextDay, EVENT_TEXT, ENSO } from './climate.js';
 import { marketDay } from './market.js';
 import { animalsHour, animalsDay } from './animals.js';
@@ -105,7 +106,25 @@ export function hourly(g, hour) {
   // geada na madrugada
   if (hour === 5 && today.frost) frostHits(g, today);
 
+  // granizo nas primeiras horas da tempestade
+  if (today.hail && rain > 0 && hour < today.rainStart + 2) hailHits(g, hour === today.rainStart);
+
+  fireHour(g, hour);
+
   animalsHour(g, hour);
+}
+
+function hailHits(g, first) {
+  const w = g.world, r = g.rng;
+  let hit = 0;
+  const sens = { cafe: 1.2, pimenta: 1.2, soja: 1, milho: 0.8, cana: 0.5 };
+  for (const c of w.crops.values()) {
+    if (c.dead || c.prog < 0.1) continue;
+    c.health -= r.range(0.08, 0.22) * (sens[c.type] || 1);
+    if (c.health <= 0) { c.dead = true; c.health = 0; g.stats.lost++; }
+    hit++;
+  }
+  if (first) g.notify(hit ? `Granizo! ${hit} plantas machucadas.` : 'Chuva de granizo!', 'bad');
 }
 
 function frostHits(g, today) {
@@ -161,6 +180,9 @@ export function daily(g, newDay) {
     if (lostG) g.notify(`${lostG} sacas estragaram fora do armazém (cabem ${cap}). Construa paiol ou silo.`, 'bad');
   }
   workersDay(g);
+  fireDay(g, today);
+  // cinza some depois de uns dias
+  for (const [i, t] of w.ash) if (g.time - t > 1440 * 6) w.ash.delete(i);
 
   // terra
   const n = w.w * w.h;

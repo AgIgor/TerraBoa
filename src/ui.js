@@ -7,6 +7,7 @@ import { animalLabel, animalValue, animalMarketQty, isAdult, makeAnimal } from '
 import { fTemp, cropStage, storageCap, grainStock } from './sim.js';
 import { hireWorker, fireWorker } from './workers.js';
 import * as Saves from './saves.js';
+import { generateWorld } from './world.js';
 
 const $ = id => document.getElementById(id);
 const fmt = v => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -15,7 +16,7 @@ const pct = v => Math.round(v * 100) + '%';
 const TOOL_ICON = { mao: '✋', enxada: '⛏️', machado: '🪓', regador: '🚿', plantar: '🌱', construir: '🔨', laco: '➰', adubo: '🧪' };
 const PLANT_ICON = { milho: '🌽', soja: '🫘', cana: '🎋', cafe: '☕', pimenta: '🌶️', capim: '🌾' };
 const GROUND_NAME = { [G.GRASS]: 'Campo nativo', [G.WATER]: 'Água', [G.SAND]: 'Areia', [G.DIRT]: 'Terra nua', [G.TILLED]: 'Terra arada', [G.PASTURE]: 'Pasto formado', [G.PATH]: 'Estrada', [G.YARD]: 'Terreiro' };
-const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.BRIDGE]: 'Ponte', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
+const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.BRIDGE]: 'Ponte', [O.LAMP]: 'Lampião', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
 
 export class UI {
   constructor(game) {
@@ -180,6 +181,8 @@ export class UI {
       if (o === O.COOP) t += '<br><span class="muted">Mão: vender e comprar</span>';
       lines.push(t);
     }
+    if (w.fires.has(i)) lines.push('<b class="down">🔥 Pegando fogo!</b> <span class="muted">Regador apaga</span>');
+    else if (w.ash.has(i)) lines.push('<span class="muted">Queimado (cinza aduba a terra)</span>');
     const c = w.crops.get(i);
     if (c) {
       const d = CROPS[c.type];
@@ -212,55 +215,118 @@ export class UI {
   close() { this.panel = null; $('modal').classList.add('hidden'); }
   isOpen() { return !!this.panel || !!this.titleOpen; }
 
-  // ---------- tela inicial ----------
+  // ---------- tela inicial e fazendas ----------
   showTitle(view = 'main') {
     this.close();
     this.titleOpen = true;
     $('title').classList.remove('hidden');
     this.renderTitle(view);
-    if (!this.titleHooked) {
-      this.titleHooked = true;
-      $('tBody').addEventListener('click', e => {
-        const b = e.target.closest('[data-tact]');
-        if (!b || b.disabled) return;
-        const d = b.dataset;
-        if (d.tact === 'view') return this.renderTitle(d.view);
-        if (d.tact === 'continue') { this.hideTitle(); this.onTitle('continue'); }
-        if (d.tact === 'start') { const seed = $('tSeed').value.trim(); this.hideTitle(); this.onTitle('new', seed); }
-        if (d.tact === 'load') { if (this.onTitle('load', d.key)) this.hideTitle(); }
-        if (d.tact === 'del') {
-          if (d.confirm !== '1') { d.confirm = '1'; b.textContent = 'Confirmar'; return; }
-          Saves.remove(d.key); this.renderTitle('load');
+    if (this.titleHooked) return;
+    this.titleHooked = true;
+    const body = $('tBody');
+    body.addEventListener('click', e => {
+      const b = e.target.closest('[data-tact]');
+      if (!b || b.disabled) return;
+      const d = b.dataset;
+      switch (d.tact) {
+        case 'view': return this.renderTitle(d.view);
+        case 'continue': this.hideTitle(); return this.onTitle('continue');
+        case 'reroll': this.newSeed = (Math.random() * 1e9) | 0; $('tSeed').value = this.newSeed; return this.drawPreview();
+        case 'start': {
+          const seedTxt = $('tSeed').value.trim();
+          const seed = /^\d+$/.test(seedTxt) ? +seedTxt : this.newSeed;
+          this.hideTitle();
+          return this.onTitle('new', { name: $('tName').value, seed });
         }
+        case 'play': if (this.onTitle('load', d.id)) this.hideTitle(); return;
+        case 'dup': if (Saves.duplicateFarm(d.id)) this.renderTitle('farms'); else this.toast('Sem espaço para a cópia.', 'bad'); return;
+        case 'export': return this.download(d.id);
+        case 'import': return $('tFile').click();
+        case 'rename': {
+          const row = b.closest('.slot-row'), inp = row.querySelector('input');
+          if (inp) { Saves.renameFarm(d.id, inp.value); if (this.g.farmId === d.id) this.g.farmName = inp.value.trim() || this.g.farmName; return this.renderTitle('farms'); }
+          const nm = row.querySelector('.info b');
+          nm.innerHTML = `<input value="${(nm.textContent || '').replace(/"/g, '&quot;')}" maxlength="40">`;
+          nm.querySelector('input').focus();
+          b.textContent = 'OK';
+          return;
+        }
+        case 'del':
+          if (d.confirm !== '1') { d.confirm = '1'; b.textContent = 'Confirmar'; return; }
+          Saves.deleteFarm(d.id);
+          if (this.g.farmId === d.id) this.onTitle('deleted');
+          return this.renderTitle('farms');
+      }
+    });
+    body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.closest('.slot-row')?.querySelector('[data-tact=rename]')?.click(); });
+    body.addEventListener('input', e => { if (e.target.id === 'tSeed') this.drawPreview(); });
+    body.addEventListener('change', e => {
+      if (e.target.id !== 'tFile' || !e.target.files[0]) return;
+      e.target.files[0].text().then(txt => {
+        const r = Saves.importFarm(txt);
+        if (r.ok) { this.toast('Fazenda importada.', 'good'); this.renderTitle('farms'); }
+        else this.toast(r.reason, 'bad');
       });
-    }
+    });
   }
   hideTitle() { this.titleOpen = false; $('title').classList.add('hidden'); }
+  download(id) {
+    const f = Saves.exportFarm(id);
+    if (!f) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([f.text], { type: 'application/json' }));
+    a.download = f.filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
   renderTitle(view) {
     const body = $('tBody');
-    const saves = Saves.list();
-    const auto = saves[0];
-    const anySave = saves.some(s => !s.empty);
+    const farms = Saves.listFarms();
+    const last = farms.find(f => f.id === Saves.lastId());
     if (view === 'main') {
       body.innerHTML = `
-        ${auto.empty ? '' : `<button class="tbtn primary" data-tact="continue">Continuar<small>${Saves.describe(auto)}</small></button>`}
-        <button class="tbtn ${auto.empty ? 'primary' : ''}" data-tact="view" data-view="new">Novo jogo<small>Um mapa novo, começando na primavera</small></button>
-        <button class="tbtn" data-tact="view" data-view="load" ${anySave ? '' : 'disabled'}>Carregar jogo<small>${anySave ? 'Automático e 3 espaços de save' : 'Nenhum jogo salvo ainda'}</small></button>
+        ${last ? `<button class="tbtn primary" data-tact="continue"><span class="tline">${last.thumb ? `<img src="${last.thumb}" alt="">` : ''}<span>Continuar: ${esc(last.name)}<small>${Saves.describe(last)}</small></span></span></button>` : ''}
+        <button class="tbtn ${last ? '' : 'primary'}" data-tact="view" data-view="new">Nova fazenda<small>Escolha o mapa e dê um nome; as outras fazendas continuam guardadas</small></button>
+        <button class="tbtn" data-tact="view" data-view="farms">Minhas fazendas<small>${farms.length ? `${farms.length} salva${farms.length > 1 ? 's' : ''} · carregar, renomear, copiar, exportar` : 'Nenhuma ainda · importar arquivo'}</small></button>
         <button class="tbtn" data-tact="view" data-view="help">Como jogar<small>Controles e dicas</small></button>`;
     } else if (view === 'new') {
+      this.newSeed = (Math.random() * 1e9) | 0;
       body.innerHTML = `
-        <label class="tfield">Semente do mapa (opcional; a mesma semente gera o mesmo mapa)<input id="tSeed" inputmode="numeric" placeholder="aleatória"></label>
-        ${auto.empty ? '' : '<p class="note warn">O save automático atual será substituído. Para guardar este jogo, salve num espaço pelo Menu antes.</p>'}
+        <label class="tfield">Nome da fazenda<input id="tName" maxlength="40" value="${esc(Saves.suggestName())}"></label>
+        <div class="tmap"><canvas id="tPrev" width="192" height="192"></canvas>
+          <div class="tmapside"><label class="tfield">Semente do mapa<input id="tSeed" inputmode="numeric" value="${this.newSeed}"></label>
+          <button class="tbtn" data-tact="reroll">Sortear outro mapa<small>Mesma semente = mesmo mapa</small></button>
+          <p class="note">Casa no centro; azul é água, verde-escuro é mata.</p></div></div>
         <button class="tbtn primary" data-tact="start">Começar<small>R$ 600, sementes de milho, capim e madeira</small></button>
         <button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
-    } else if (view === 'load') {
-      const names = { [Saves.AUTO]: 'Automático' };
-      body.innerHTML = `<div class="slots">${saves.map((s, k) => `<div class="slot-row"><div class="info"><b>${names[s.key] || 'Espaço ' + k}</b><span>${Saves.describe(s)}</span></div>
-        <div class="btns"><button data-tact="load" data-key="${s.key}" ${s.empty ? 'disabled' : ''}>Carregar</button>${s.empty ? '' : `<button data-tact="del" data-key="${s.key}">Apagar</button>`}</div></div>`).join('')}</div>
+      this.drawPreview();
+    } else if (view === 'farms') {
+      body.innerHTML = `<div class="slots">${farms.map(f => `<div class="slot-row">${f.thumb ? `<img class="thumb" src="${f.thumb}" alt="">` : '<span class="thumb"></span>'}
+          <div class="info"><b>${esc(f.name)}${f.id === this.g.farmId && this.started ? ' <em>(aberta)</em>' : ''}</b><span>${Saves.describe(f)}</span></div>
+          <div class="btns wrap"><button data-tact="play" data-id="${f.id}">Jogar</button><button data-tact="rename" data-id="${f.id}">Renomear</button>
+          <button data-tact="dup" data-id="${f.id}" title="Cria uma cópia (ponto de volta)">Copiar</button><button data-tact="export" data-id="${f.id}" title="Baixa um arquivo .json">Exportar</button>
+          <button data-tact="del" data-id="${f.id}">Apagar</button></div></div>`).join('') || '<p class="note">Nenhuma fazenda salva ainda.</p>'}</div>
+        <input type="file" id="tFile" accept=".json,application/json" hidden>
+        <p class="note">Saves ficam neste navegador (${Saves.storageKB()} KB usados). Exporte para guardar fora ou levar para outro aparelho.</p>
+        <button class="tbtn" data-tact="import">Importar fazenda de um arquivo<small>.json exportado pelo Terra Boa</small></button>
         <button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
     } else if (view === 'help') {
       body.innerHTML = `<div class="thelp">${this.tab_menu_ajuda()}</div><button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
     }
+  }
+  drawPreview() {
+    const cv = $('tPrev');
+    if (!cv) return;
+    const v = $('tSeed').value.trim();
+    const seed = /^\d+$/.test(v) ? +v : this.newSeed;
+    clearTimeout(this.prevT);
+    this.prevT = setTimeout(() => drawMap(cv, generateWorld(seed)), 60);
+  }
+  // miniatura do mapa atual para a lista de fazendas
+  thumb(g) {
+    const c = document.createElement('canvas'); c.width = c.height = 72;
+    drawMap(c, g.world);
+    try { return c.toDataURL('image/png'); } catch { return null; }
   }
 
   render() {
@@ -270,7 +336,7 @@ export class UI {
       mercado: [['vender', 'Vender'], ['insumos', 'Comprar insumos'], ['animais', 'Animais'], ['noticias', 'Notícias']],
       fazenda: [['animais', 'Rebanho'], ['lavouras', 'Lavouras'], ['peoes', 'Peões'], ['diario', 'Diário']],
       tempo: [['previsao', 'Previsão'], ['calendario', 'Calendário de plantio']],
-      menu: [['jogo', 'Salvar e carregar'], ['ajuda', 'Como jogar']],
+      menu: [['jogo', 'Fazenda e saves'], ['ajuda', 'Como jogar']],
     }[this.panel];
     const titles = { mercado: this.atCoop ? 'Cooperativa' : 'Mercado <small>(só consulta — vá até a cooperativa para negociar)</small>', fazenda: 'Fazenda', tempo: 'Tempo e clima', menu: 'Terra Boa' };
     $('mTitle').innerHTML = titles[this.panel];
@@ -344,23 +410,23 @@ export class UI {
       const k = g.workers.find(k => k.id === +ds.id);
       fireWorker(g, +ds.id);
       if (k) this.toast(`${k.name} foi dispensado.`);
-    } else if (act === 'saveslot') {
-      if (ds.confirm !== '1' && Saves.has(ds.key) && ds.key !== Saves.AUTO) { el.dataset.confirm = '1'; el.textContent = 'Confirmar'; return; }
-      Saves.saveTo(ds.key, g); this.toast('Jogo salvo.', 'good');
-    } else if (act === 'loadslot') {
-      if (this.onLoadSlot && this.onLoadSlot(ds.key)) { this.close(); this.toast('Jogo carregado.', 'good'); }
-      return;
-    } else if (act === 'delslot') {
-      if (ds.confirm !== '1') { el.dataset.confirm = '1'; el.textContent = 'Confirmar'; return; }
-      Saves.remove(ds.key);
+    } else if (act === 'savenow') {
+      const r = this.onSave ? this.onSave(true) : null;
+      if (r && !r.ok) return this.toast(r.reason, 'bad');
+      this.toast('Fazenda salva.', 'good');
+    } else if (act === 'dupnow') {
+      this.onSave && this.onSave(true);
+      if (Saves.duplicateFarm(g.farmId)) this.toast('Cópia criada em Minhas fazendas (ponto de volta).', 'good');
+      else this.toast('Sem espaço para a cópia.', 'bad');
+    } else if (act === 'exportnow') {
+      this.onSave && this.onSave(true);
+      this.download(g.farmId); return;
+    } else if (act === 'renamenow') {
+      const v = document.getElementById('farmName').value.trim();
+      if (v) { g.farmName = v; Saves.renameFarm(g.farmId, v); this.toast('Nome salvo.', 'good'); }
     } else if (act === 'title') {
-      this.onSave && this.onSave();
+      this.onSave && this.onSave(true);
       this.showTitle(); return;
-    } else if (act === 'save') { this.onSave && this.onSave(); this.toast('Jogo salvo.', 'good'); }
-    else if (act === 'new') {
-      if (ds.confirm === '1') { this.onNew && this.onNew(); this.close(); return; }
-      el.dataset.confirm = '1'; el.textContent = 'Confirmar: apagar o jogo atual';
-      return;
     }
     this.render();
   }
@@ -529,21 +595,22 @@ export class UI {
         <li><b>Armazém:</b> a casa guarda 40 sacas de grão. Paiol (+80) e silo (+400) evitam que a colheita estrague. Leite e cana estragam rápido.</li>
         <li><b>Trator e peões:</b> o trator (cooperativa) faz 3×3 de uma vez; peões (janela Fazenda) regam, colhem e tratam dos bichos.</li>
         <li><b>Rio:</b> construa ponte (6 madeiras) em cima da água. Animais também passam.</li>
+        <li><b>Fogo:</b> na seca longa pode pegar fogo no campo; o vento leva para leste. Terra arada, estrada e água fazem aceiro; o regador apaga e a chuva também.</li>
+        <li><b>Noite:</b> o lampião (3 madeiras) ilumina em volta.</li>
         <li><b>Arou no lugar errado?</b> Clique com a enxada na terra arada para desfazer.</li>
         <li><b>Noite:</b> durma na casa (mão) depois das 19h. O jogo salva sozinho todo dia.</li>
       </ul></div></div>`;
   }
   tab_menu_jogo(g) {
-    const saves = Saves.list();
-    const names = { [Saves.AUTO]: 'Automático' };
-    return `<p class="note">O automático salva sozinho a cada dia e ao fechar a página. Use os espaços para guardar pontos da sua fazenda.</p>
-      <div class="slots">${saves.map((s, k) => `<div class="slot-row"><div class="info"><b>${names[s.key] || 'Espaço ' + k}</b><span>${Saves.describe(s)}</span></div>
-        <div class="btns"><button data-act="saveslot" data-key="${s.key}">${s.empty ? 'Salvar aqui' : 'Sobrescrever'}</button>
-        <button data-act="loadslot" data-key="${s.key}" ${s.empty ? 'disabled' : ''}>Carregar</button>
-        ${s.empty || s.key === Saves.AUTO ? '' : `<button data-act="delslot" data-key="${s.key}">Apagar</button>`}</div></div>`).join('')}</div>
-      <p style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="title">Tela inicial</button></p>
-      <div class="card" style="margin-top:10px"><div class="kv"><span>Semente do mapa</span><b>${g.seed}</b></div><div class="kv"><span>Dias jogados</span><b>${g.stats.days}</b></div></div>`;
+    return `<div class="card"><label class="tfield">Nome desta fazenda<span style="display:flex;gap:6px"><input id="farmName" maxlength="40" value="${esc(g.farmName || '')}" style="flex:1"><button class="btn" data-act="renamenow">Renomear</button></span></label>
+      <div class="kv" style="margin-top:8px"><span>Semente do mapa</span><b>${g.seed}</b></div><div class="kv"><span>Dias jogados</span><b>${g.stats.days}</b></div></div>
+      <p class="note" style="margin-top:10px">Esta fazenda salva sozinha a cada dia e ao fechar a página. Começar uma fazenda nova não apaga esta.</p>
+      <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="savenow">Salvar agora</button>
+      <button class="btn" data-act="dupnow" title="Guarda uma cópia do jeito que está agora">Criar ponto de volta</button>
+      <button class="btn" data-act="exportnow">Exportar arquivo</button>
+      <button class="btn" data-act="title">Tela inicial / outras fazendas</button></p>`;
   }
+
 }
 
 // ---------- auxiliares ----------
@@ -618,4 +685,25 @@ function estimateCrop(d, doy) {
   }
   const score = n ? sum / n : 0;
   return { days: prog >= 1 ? n : 0, score, frost, dry: rainSum / n < 0.25 };
+}
+
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// Desenha o mapa inteiro em miniatura (um pixel por tile).
+const MAP_COL = { [G.WATER]: [59, 125, 179], [G.SAND]: [217, 199, 143], [G.DIRT]: [141, 107, 71], [G.TILLED]: [110, 76, 46], [G.PATH]: [176, 145, 94], [G.YARD]: [184, 154, 106] };
+const OBJ_COL = { [O.TREE]: [38, 96, 36], [O.BUSH]: [70, 128, 52], [O.ROCK]: [130, 132, 128], [O.FENCE]: [107, 69, 38], [O.GATE]: [150, 110, 70], [O.HOUSE]: [190, 70, 50], [O.COOP]: [60, 120, 70], [O.BRIDGE]: [154, 106, 58], [O.PAIOL]: [168, 118, 62], [O.SILO]: [200, 204, 208] };
+function drawMap(cv, w) {
+  const tmp = document.createElement('canvas'); tmp.width = w.w; tmp.height = w.h;
+  const tc = tmp.getContext('2d'), img = tc.createImageData(w.w, w.h);
+  for (let i = 0; i < w.w * w.h; i++) {
+    let col = OBJ_COL[w.obj[i]] || MAP_COL[w.ground[i]];
+    if (!col) { const gv = w.grass[i]; col = w.ground[i] === G.PASTURE ? [70, 160, 60] : [95 + (1 - gv) * 60, 150 - (1 - gv) * 20, 70]; }
+    if (w.crops.has(i)) col = [150, 170, 60];
+    img.data.set([col[0], col[1], col[2], 255], i * 4);
+  }
+  tc.putImageData(img, 0, 0);
+  const c = cv.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.drawImage(tmp, 0, 0, cv.width, cv.height);
 }

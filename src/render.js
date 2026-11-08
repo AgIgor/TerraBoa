@@ -5,7 +5,7 @@ import { cropStage } from './sim.js';
 import { rainAt, tempAt } from './climate.js';
 import { hourOf, dayOf } from './game.js';
 import { isAdult } from './animals.js';
-import { fx, updateWind, updateFx, swayX, skew, shakeOffset, drawCloudShadows, drawParts, drawSmoke, drawRain, drawLeaves, smoke } from './fx.js';
+import { fx, updateWind, updateFx, swayX, skew, shakeOffset, drawCloudShadows, drawParts, drawSmoke, drawRain, drawLeaves, smoke, drawHail, ember } from './fx.js';
 
 const T = TILE;
 
@@ -78,6 +78,8 @@ export class Renderer {
       if (gr === G.TILLED && w.moist[i] > 0.15) { ctx.globalAlpha = Math.min(1, (w.moist[i] - 0.15) * 1.6); ctx.drawImage(wetTilled(), px, py); ctx.globalAlpha = 1; }
       if (gr === G.WATER) shore(ctx, w, x, y, px, py);
       if (w.obj[i] === O.BRIDGE) drawBridge(ctx, w, x, y, px, py);
+      const ash = w.ash.get(i);
+      if (ash != null) { const k = Math.max(0, 1 - (g.time - ash) / (1440 * 6)); ctx.fillStyle = `rgba(40,34,30,${(0.65 * k).toFixed(2)})`; ctx.fillRect(px, py, T, T); }
     }
     // geada pela manhã
     if (today.frost && hour < 9.5) {
@@ -96,6 +98,8 @@ export class Renderer {
       if (o !== O.NONE && o !== O.HOUSE && o !== O.COOP && o !== O.BRIDGE) list.push([y + (o === O.TREE ? 0.85 : 0.7), 1, i, o]);
     }
     for (const b of w.buildings) list.push([b.y + b.h, 2, b]);
+    for (const i of w.fires.keys()) { const x = i % w.w, y = (i / w.w) | 0; if (x >= x0 && x <= x1 && y >= y0 && y <= y1) list.push([y + 0.9, 8, i]); }
+    this.view = { x0, x1, y0, y1 };
     for (const e of w.drops) if (e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1) list.push([e.y + 0.3, 3, e]);
     for (const a of g.animals) if (!a.ridden && a.x > x0 - 1 && a.x < x1 + 2 && a.y > y0 - 1 && a.y < y1 + 2) list.push([a.y + 0.2, 4, a]);
     for (const v of g.vehicles) if (!(p.mount?.kind === 'trator' && p.mount.id === v.id)) list.push([v.y + 0.3, 6, v]);
@@ -121,6 +125,7 @@ export class Renderer {
         case 5: drawPlayer(ctx, g, now); break;
         case 6: drawTractor(ctx, it[2].x * T, it[2].y * T, it[2].fx >= 0 ? 1 : -1); break;
         case 7: drawWorker(ctx, it[2]); break;
+        case 8: drawFire(ctx, w, it[2], now, dt); break;
       }
     }
     drawSmoke(ctx);
@@ -211,6 +216,15 @@ export class Renderer {
         ctx.fillStyle = '#6e4626'; ctx.fillRect(px + 2, py + 24, 3, 5); ctx.fillRect(px + 27, py + 24, 3, 5);
         break;
       }
+      case O.LAMP: {
+        const lit = hour >= 17.5 || hour < 6.5;
+        ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(px + 12, py + 26, 10, 3);
+        ctx.fillStyle = '#5a3a20'; ctx.fillRect(px + 15, py - 8, 3, 34);
+        ctx.fillStyle = '#3a3a3e'; ctx.fillRect(px + 12, py - 14, 9, 8); ctx.fillRect(px + 13, py - 16, 7, 2);
+        ctx.fillStyle = lit ? '#ffd27a' : '#c8d0d8'; ctx.fillRect(px + 13.5, py - 12.5, 6, 5);
+        if (lit) { ctx.fillStyle = 'rgba(255,200,110,0.25)'; ctx.beginPath(); ctx.arc(px + 16.5, py - 10, 9, 0, Math.PI * 2); ctx.fill(); }
+        break;
+      }
       case O.PAIOL: {
         ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(px + 2, py + 26, 32, 6);
         ctx.fillStyle = '#6b4526'; ctx.fillRect(px + 3, py + 18, 3, 10); ctx.fillRect(px + 26, py + 18, 3, 10);
@@ -268,6 +282,7 @@ export class Renderer {
     drawRain(ctx, vw, vh, inten, dt);
     if (inten > 0) { ctx.fillStyle = `rgba(40,55,80,${(0.08 + inten * 0.14).toFixed(3)})`; ctx.fillRect(0, 0, vw, vh); }
     drawLeaves(ctx, vw, vh, dt, today.season);
+    drawHail(ctx, vw, vh, !!(today.hail && rainNow > 0 && hour < today.rainStart + 2), dt);
     // relâmpagos
     if (today.storm && rainNow > 0 && Math.random() < dt * 0.15) this.flash = 1;
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${(this.flash * 0.5).toFixed(2)})`; ctx.fillRect(0, 0, vw, vh); this.flash -= dt * 4; }
@@ -302,6 +317,13 @@ export class Renderer {
     const p = g.player;
     hole(p.x, p.y - 0.4, 4.2, 0.95);
     for (const b of g.world.buildings) hole(b.x + b.w / 2, b.y + b.h - 0.2, 3, 0.8);
+    const wv = g.world, v = this.view;
+    const glows = [];
+    if (v) for (let y = v.y0; y <= v.y1; y++) for (let x = v.x0; x <= v.x1; x++) {
+      const i = wv.idx(x, y);
+      if (wv.obj[i] === O.LAMP) { hole(x + 0.5, y - 0.3, 4.5, 0.95); glows.push([x + 0.5, y - 0.3, 3.2, 0.35]); }
+    }
+    for (const i of wv.fires.keys()) { const x = i % wv.w + 0.5, y = ((i / wv.w) | 0) + 0.4; hole(x, y, 3.2, 0.9); glows.push([x, y, 2.6, 0.4]); }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(light, 0, 0);
     // brilho quente da lanterna
@@ -310,10 +332,33 @@ export class Renderer {
     const gr = ctx.createRadialGradient(sx, sy, 0, sx, sy, 3 * s);
     gr.addColorStop(0, `rgba(255,190,90,${(dark * 0.25).toFixed(2)})`); gr.addColorStop(1, 'rgba(255,190,90,0)');
     ctx.fillStyle = gr; ctx.fillRect(sx - 3 * s, sy - 3 * s, 6 * s, 6 * s);
+    for (const [wx, wy, r, a] of glows) {
+      const gx = this.vw / 2 + (wx - this.cam.x) * s, gy = this.vh / 2 + (wy - this.cam.y) * s;
+      const gg = ctx.createRadialGradient(gx, gy, 0, gx, gy, r * s);
+      gg.addColorStop(0, `rgba(255,170,70,${(dark * a).toFixed(2)})`); gg.addColorStop(1, 'rgba(255,170,70,0)');
+      ctx.fillStyle = gg; ctx.fillRect(gx - r * s, gy - r * s, r * s * 2, r * s * 2);
+    }
   }
 }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// Chamas animadas com brasas e fumaça
+function drawFire(ctx, w, i, now, dt) {
+  const x = i % w.w, y = (i / w.w) | 0, px = x * T + 16, py = y * T + 28;
+  const f = w.fires.get(i), k = Math.max(0.4, f ? f.heat : 1);
+  const t = now / 90 + i;
+  for (let j = 0; j < 4; j++) {
+    const ox = (j - 1.5) * 6 + Math.sin(t * 0.7 + j) * 1.5, h = (14 + 8 * Math.sin(t + j * 1.7)) * k + fx.wind * 2;
+    ctx.fillStyle = j % 2 ? 'rgba(255,120,30,0.9)' : 'rgba(255,190,60,0.9)';
+    ctx.beginPath(); ctx.moveTo(px + ox - 5, py); ctx.quadraticCurveTo(px + ox - 4 + fx.wind * 3, py - h * 0.6, px + ox + fx.wind * 4, py - h);
+    ctx.quadraticCurveTo(px + ox + 4 + fx.wind * 3, py - h * 0.6, px + ox + 5, py); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(255,240,170,0.85)';
+  ctx.beginPath(); ctx.ellipse(px, py - 3, 7 * k, 3, 0, 0, Math.PI * 2); ctx.fill();
+  if (Math.random() < dt * 3) ember(x + 0.5, y + 0.85);
+  if (Math.random() < dt * 1.5) smoke(x + 0.5, y + 0.2);
+}
 
 // Ponte: tábuas atravessadas no sentido da travessia e corrimão nas laterais.
 function drawBridge(ctx, w, x, y, px, py) {

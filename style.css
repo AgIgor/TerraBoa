@@ -238,3 +238,16 @@ body.touch #touchBtns button { width: 64px; height: 64px; border-radius: 50%; ba
 .slot-row .info b { display: block; font-size: 13px; }
 .slot-row .info span { font-size: 12px; color: var(--muted); }
 .slot-row .btns { flex: none; }
+.tline { display: flex; gap: 10px; align-items: center; }
+.tline img { width: 44px; height: 44px; border-radius: 6px; image-rendering: pixelated; border: 1px solid rgba(0,0,0,.25); }
+.tline > span { display: flex; flex-direction: column; gap: 2px; }
+.tmap { display: flex; gap: 12px; align-items: flex-start; }
+.tmap canvas { width: 160px; height: 160px; flex: none; border-radius: 8px; image-rendering: pixelated; border: 1px solid var(--line); background: #1d2a14; }
+.tmapside { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tmapside .note { margin: 0; }
+.slot-row .thumb { width: 48px; height: 48px; flex: none; border-radius: 6px; image-rendering: pixelated; background: rgba(0,0,0,.25); border: 1px solid var(--line); }
+.slot-row .info b em { font-style: normal; font-weight: 400; color: var(--accent); font-size: 11px; }
+.slot-row .info input { font: inherit; width: 100%; color: var(--text); background: rgba(0,0,0,.3); border: 1px solid var(--accent); border-radius: 5px; padding: 2px 6px; }
+.btns.wrap { flex-wrap: wrap; max-width: 210px; justify-content: flex-end; }
+.tcard { width: min(560px, 100%); }
+@media (max-width: 520px) { .tmap { flex-direction: column; } .tmap canvas { width: 100%; height: auto; aspect-ratio: 1; } .slot-row { flex-wrap: wrap; } .btns.wrap { max-width: none; } }

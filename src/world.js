@@ -12,6 +12,7 @@ const SHAPES = {
   [O.SPRINKLER]: [[0.4, 0.6, 0.55, 0.9]],
   [O.PAIOL]: [[0.04, 0.96, 0.3, 0.9]],
   [O.SILO]: [[0.06, 0.94, 0.2, 0.95]],
+  [O.LAMP]: [[0.4, 0.6, 0.6, 0.88]],
   [O.HOUSE]: FULL,
   [O.COOP]: FULL,
 };
@@ -33,6 +34,8 @@ export class World {
     this.troughs = new Map();    // idx -> { water }
     this.feeders = new Map();    // idx -> { food }
     this.sprinklers = new Set();
+    this.fires = new Map();      // idx -> { heat, age } fogo aceso
+    this.ash = new Map();        // idx -> minuto em que queimou (cinza no chão)
     this.buildings = [];         // { kind, x, y, w, h }
     this.drops = [];             // ovos no chão { x, y, n, day }
     this.dirty = true;
@@ -211,29 +214,75 @@ function placeBuilding(w, kind, x, y, bw, bh, o) {
 }
 
 // ---- salvar / carregar ----
+// Formato compacto: cada camada vira base64 (com compressão de sequências repetidas quando compensa).
+// Umidade, capim e fertilidade são guardados com 256 níveis. Saves antigos (listas de números) continuam abrindo.
 const ARRAYS = ['ground', 'obj', 'hp', 'idle'];
 const FLOATS = ['moist', 'grass', 'fert'];
 
+function toB64(u8) {
+  if (typeof btoa === 'function') {
+    let s = '';
+    for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  return Buffer.from(u8).toString('base64');
+}
+function fromB64(str) {
+  if (typeof atob === 'function') { const s = atob(str), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+  return new Uint8Array(Buffer.from(str, 'base64'));
+}
+function rle(u8) {
+  const out = [];
+  for (let i = 0; i < u8.length;) {
+    const v = u8[i]; let n = 1;
+    while (i + n < u8.length && u8[i + n] === v && n < 255) n++;
+    out.push(v, n); i += n;
+  }
+  return Uint8Array.from(out);
+}
+function unrle(p, n) {
+  const u = new Uint8Array(n);
+  let k = 0;
+  for (let i = 0; i < p.length; i += 2) { u.fill(p[i], k, k + p[i + 1]); k += p[i + 1]; }
+  return u;
+}
+function pack(u8) {
+  const r = rle(u8);
+  return r.length < u8.length ? 'r:' + toB64(r) : 'b:' + toB64(u8);
+}
+function unpack(str, n) {
+  const data = fromB64(str.slice(2));
+  return str[0] === 'r' ? unrle(data, n) : data;
+}
+
 export function worldToJSON(w) {
-  const o = { w: w.w, h: w.h, farm: w.farm, spawn: w.spawn, buildings: w.buildings, drops: w.drops };
-  for (const k of ARRAYS) o[k] = Array.from(w[k]);
-  for (const k of FLOATS) o[k] = Array.from(w[k], v => Math.round(v * 1000));
+  const o = { enc: 2, w: w.w, h: w.h, farm: w.farm, spawn: w.spawn, buildings: w.buildings, drops: w.drops };
+  for (const k of ARRAYS) o[k] = pack(w[k]);
+  for (const k of FLOATS) o[k] = pack(Uint8Array.from(w[k], v => Math.round(Math.max(0, Math.min(1, v)) * 255)));
   o.crops = [...w.crops];
   o.troughs = [...w.troughs];
   o.feeders = [...w.feeders];
   o.sprinklers = [...w.sprinklers];
+  o.fires = [...w.fires];
+  o.ash = [...w.ash];
   return o;
 }
 
 export function worldFromJSON(o) {
   const w = new World(o.w, o.h);
-  for (const k of ARRAYS) w[k].set(o[k]);
-  for (const k of FLOATS) w[k].set(o[k].map(v => v / 1000));
+  const n = o.w * o.h;
+  for (const k of ARRAYS) w[k].set(typeof o[k] === 'string' ? unpack(o[k], n) : o[k]);
+  for (const k of FLOATS) {
+    if (typeof o[k] === 'string') { const u = unpack(o[k], n); for (let i = 0; i < n; i++) w[k][i] = u[i] / 255; }
+    else w[k].set(o[k].map(v => v / 1000));
+  }
   w.farm = o.farm; w.spawn = o.spawn; w.buildings = o.buildings; w.drops = o.drops || [];
   w.crops = new Map(o.crops);
   w.troughs = new Map(o.troughs);
   w.feeders = new Map(o.feeders);
   w.sprinklers = new Set(o.sprinklers);
+  w.fires = new Map(o.fires || []);
+  w.ash = new Map(o.ash || []);
   w.recomputeComponents();
   return w;
 }

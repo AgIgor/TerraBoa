@@ -4,6 +4,7 @@ import {
   FEED_VALUE, ANIMALS, LASSO_REACH, DIESEL_PER_TILE, MAX_LED, SPRINKLER,
 } from './config.js';
 import { hourOf, sleep } from './game.js';
+import { douse } from './fire.js';
 import { animalLabel, settleAnimal, isAdult, startFlee } from './animals.js';
 
 const say = (msg, kind = 'info', extra = {}) => ({ ok: kind !== 'bad', msg, kind, ...extra });
@@ -218,7 +219,7 @@ function axe(g, x, y) {
     return say('+4 madeira', 'good');
   }
   if (o === O.BUSH) { w.obj[i] = O.NONE; w.dirty = true; addItem(g, 'madeira', 1); return say('+1 madeira', 'good'); }
-  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1], [O.BRIDGE]: ['madeira', 4] }[o];
+  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1], [O.BRIDGE]: ['madeira', 4], [O.LAMP]: ['madeira', 2] }[o];
   if (refund) {
     w.obj[i] = O.NONE; w.dirty = true;
     w.troughs.delete(i); w.feeders.delete(i); w.sprinklers.delete(i);
@@ -231,6 +232,13 @@ function axe(g, x, y) {
 function water(g, x, y) {
   const w = g.world, i = w.idx(x, y), p = g.player;
   if (w.ground[i] === G.WATER) { p.water = REGADOR_MAX; return say('Regador cheio', 'good'); }
+  if (w.fires.has(i)) {
+    if (p.water <= 0) return say('Regador vazio! Encha na água para apagar o fogo.', 'bad');
+    p.water--;
+    const n = douse(g, x, y);
+    w.moist[i] = Math.min(1, w.moist[i] + 0.6);
+    return say(`Apagou o fogo${n > 1 ? ` (${n} focos)` : ''}`, 'good');
+  }
   if (w.obj[i] === O.TROUGH) {
     if (p.water <= 0) return say('Regador vazio. Encha na água.', 'bad');
     const t = w.troughs.get(i), add = Math.min(TROUGH_MAX - t.water, p.water);

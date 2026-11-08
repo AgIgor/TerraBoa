@@ -9,9 +9,10 @@ import { updateWorkers } from './workers.js';
 import { Renderer } from './render.js';
 import { UI } from './ui.js';
 
-// Começa com o save automático (ou um mapa novo) desenhado ao fundo da tela inicial.
-let g = Saves.loadFrom(Saves.AUTO) || newGame();
-let started = false; // só salva depois que o jogador entrou no jogo
+// Converte saves antigos em fazendas e abre a última jogada (ou um mapa novo) ao fundo da tela inicial.
+Saves.migrate();
+let g = (Saves.lastId() && Saves.loadFarm(Saves.lastId())) || newGame();
+let started = false; // só salva depois que o jogador entrou numa fazenda
 const R = new Renderer(document.getElementById('game'));
 const ui = new UI(g);
 hook(g);
@@ -25,32 +26,41 @@ function setGame(ng) {
   g = ng; hook(g); ui.setGame(g);
   lastDay = dayOf(g); tipPin = null; R.camInit = false; keys.clear();
 }
+function enter() { started = true; ui.started = true; }
 ui.onTitle = (act, arg) => {
-  if (act === 'continue') { started = true; return true; }
+  if (act === 'continue') {
+    if (!g.farmId) { const id = Saves.lastId(); if (id) setGame(Saves.loadFarm(id)); }
+    enter(); return true;
+  }
   if (act === 'new') {
-    const seed = /^\d+$/.test(arg || '') ? +arg : undefined;
-    setGame(newGame(seed));
-    started = true; save();
-    ui.toast('Novo jogo. Boa sorte na roça!', 'good');
+    save(); // guarda a fazenda que estava aberta antes de trocar
+    setGame(newGame(arg.seed));
+    const r = Saves.createFarm(g, arg.name, ui.thumb(g));
+    enter();
+    if (!r.ok) ui.toast(r.reason, 'bad');
+    else ui.toast(`${g.farmName}: boa sorte na roça!`, 'good');
     setTimeout(() => ui.open('menu', { tab: 'ajuda' }), 400);
     return true;
   }
-  if (act === 'load') return loadSlot(arg);
+  if (act === 'load') {
+    if (started && arg === g.farmId) { enter(); return true; }
+    save();
+    const ng = Saves.loadFarm(arg);
+    if (!ng) { ui.toast('Não foi possível abrir essa fazenda.', 'bad'); return false; }
+    setGame(ng); enter();
+    ui.toast(`${g.farmName} carregada.`, 'good');
+    return true;
+  }
+  if (act === 'deleted') { started = false; ui.started = false; g.farmId = null; }
 };
-function loadSlot(key) {
-  const ng = Saves.loadFrom(key);
-  if (!ng) { ui.toast('Não foi possível abrir esse save.', 'bad'); return false; }
-  setGame(ng); started = true;
-  if (key !== Saves.AUTO) save(); // o carregado vira o jogo atual do automático
-  return true;
-}
-ui.onLoadSlot = loadSlot;
 ui.onSave = save;
 
-function save() {
-  if (started) Saves.saveTo(Saves.AUTO, g);
+// Salva a fazenda aberta. Miniatura só quando pedido (manual) ou uma vez por dia.
+function save(withThumb = false) {
+  if (!started || !g.farmId) return { ok: true };
+  return Saves.saveFarm(g, withThumb ? ui.thumb(g) : undefined);
 }
-window.addEventListener('beforeunload', save);
+window.addEventListener('beforeunload', () => save());
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 
 // ---------- entrada ----------
@@ -295,7 +305,7 @@ function frame(now) {
     updateWorkers(g, dt * Math.sqrt(g.speed), hourOf(g));
     advance(g, dt * MIN_PER_SEC * g.speed);
   } else updateAnimals(g, 0);
-  if (dayOf(g) !== lastDay) { lastDay = dayOf(g); save(); }
+  if (dayOf(g) !== lastDay) { lastDay = dayOf(g); const r = save(true); if (r && !r.ok) ui.toast(r.reason, 'bad'); }
 
   // alvo e dica
   const tool = TOOLS[g.player.tool].id;

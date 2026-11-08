@@ -79,10 +79,12 @@ export function genDay(c, rng, day) {
   c.prevRain = rain > 0;
   const cloud = rain > 0 ? 0.85 : rng.range(0, 0.6);
   // vento: chuva e frente fria ventam mais; tempestade venta forte; agosto é mês de ventania
+  // granizo: tempestade forte na primavera ou no verão
+  const hail = storm && (si === 0 || si === 1) && rng.chance(0.3);
   let wind = 0.25 + cloud * 0.45 + (rain > 0 ? 0.25 : 0) + (storm ? 1.0 : 0) + (event === 'frente' ? 0.55 : 0) + (doy >= 40 ? 0.35 : 0);
   return {
     day, doy, season: si, tMin: round1(tMin), tMax: round1(tMax), rain, rainStart, rainHours,
-    frost, storm, event, cloud, wind: Math.round(wind * 100) / 100,
+    frost, storm, hail, event, cloud, wind: Math.round(wind * 100) / 100,
   };
 }
 
@@ -114,10 +116,10 @@ export function rainAt(d, h) {
 }
 
 export function weatherLabel(d, h = 12) {
-  if (h != null && rainAt(d, Math.floor(h)) > 0) return d.storm ? 'Tempestade' : d.rain < 6 ? 'Garoa' : 'Chuva';
+  if (h != null && rainAt(d, Math.floor(h)) > 0) return d.hail && h < d.rainStart + 2 ? 'Granizo' : d.storm ? 'Tempestade' : d.rain < 6 ? 'Garoa' : 'Chuva';
   if (d.frost && h < 9) return 'Geada';
   if (d.tMax >= 34) return 'Calor forte';
-  if (d.rain > 0) return d.storm ? 'Tempestade à tarde' : 'Pancadas de chuva';
+  if (d.rain > 0) return d.hail ? 'Tempestade com granizo' : d.storm ? 'Tempestade à tarde' : 'Pancadas de chuva';
   if (d.cloud > 0.45) return 'Nublado';
   if (d.tMax < 18) return 'Frio';
   return 'Ensolarado';
@@ -125,7 +127,7 @@ export function weatherLabel(d, h = 12) {
 
 export function weatherIcon(d, h = 12) {
   const l = weatherLabel(d, h);
-  return { 'Tempestade': '⛈️', 'Tempestade à tarde': '⛈️', 'Garoa': '🌦️', 'Chuva': '🌧️', 'Pancadas de chuva': '🌦️', 'Geada': '❄️', 'Calor forte': '🔥', 'Nublado': '☁️', 'Frio': '🌥️', 'Ensolarado': '☀️' }[l] || '☀️';
+  return { 'Granizo': '🌨️', 'Tempestade com granizo': '🌨️', 'Tempestade': '⛈️', 'Tempestade à tarde': '⛈️', 'Garoa': '🌦️', 'Chuva': '🌧️', 'Pancadas de chuva': '🌦️', 'Geada': '❄️', 'Calor forte': '🔥', 'Nublado': '☁️', 'Frio': '🌥️', 'Ensolarado': '☀️' }[l] || '☀️';
 }
 
 export function windLabel(v = 0.35) { return v < 0.45 ? 'fraco' : v < 0.9 ? 'moderado' : v < 1.4 ? 'forte' : 'ventania'; }

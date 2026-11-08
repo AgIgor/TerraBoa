@@ -1,5 +1,5 @@
 // Interface em HTML: topo, inventário, barra de ferramentas, dica e janelas.
-import { TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, CROPS, CROP_LIST, ANIMALS, G, O, REGADOR_MAX, YEAR_DAYS, SEASONS, TROUGH_MAX, FEEDER_MAX, WAGE, MAX_WORKERS, WORK_TASKS, DIESEL_PER_TILE } from './config.js';
+import { TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, CROPS, CROP_LIST, ANIMALS, G, O, REGADOR_MAX, YEAR_DAYS, SEASONS, TROUGH_MAX, FEEDER_MAX, WAGE, MAX_WORKERS, WORK_TASKS, DIESEL_PER_TILE, MAX_LED } from './config.js';
 import { COMMODITIES, SELLABLE, INPUTS, price, inputPrice, sell, trend } from './market.js';
 import { dateText, clockText, hourOf, dayOf } from './game.js';
 import { tempAt, weatherLabel, weatherIcon, ENSO, seasonParams, EVENT_TEXT } from './climate.js';
@@ -246,7 +246,6 @@ export class UI {
       const v = animalValue(g, a);
       if (a.ridden) return this.toast('Desça do cavalo antes de vender.', 'bad');
       sell(m, ANIMALS[a.sp].market, animalMarketQty(a));
-      if (g.player.led === a.id) g.player.led = null;
       g.animals = g.animals.filter(x => x !== a);
       g.money += v; g.stats.earned += v;
       this.toast(`Vendeu ${animalLabel(a).toLowerCase()} por ${fmt(v)}`, 'good');
@@ -254,12 +253,12 @@ export class UI {
       const o = ANIMAL_OFFERS[+ds.i];
       const v = offerPrice(g, o);
       if (g.money < v) return this.toast('Dinheiro insuficiente.', 'bad');
-      if (g.player.led != null) return this.toast('Você já está levando um animal. Solte-o antes.', 'bad');
+      if (g.animals.filter(x => x.led).length >= MAX_LED) return this.toast(`Já está levando ${MAX_LED} animais. Solte algum antes.`, 'bad');
       const p = g.player;
       const a = makeAnimal(g, o.sp, Math.floor(p.x), Math.floor(p.y), { owned: false, sex: o.sex, weight: o.w });
-      a.x = p.x; a.y = p.y + 0.6; a.led = true; a.owned = false; p.led = a.id; a.bought = true;
+      a.x = p.x; a.y = p.y + 0.6; a.led = true; a.ledSeq = g.nextId++; a.owned = false; a.bought = true;
       g.money -= v; g.stats.spent += v;
-      this.toast(`Comprou ${o.name.toLowerCase()}. Leve no laço até o pasto e solte com o Laço.`, 'good');
+      this.toast(`Comprou ${o.name.toLowerCase()}. Leve até o pasto e clique nele com o Laço para soltar.`, 'good');
       this.close(); return;
     } else if (act === 'buyt') {
       const v = tractorPrice(g);
@@ -443,7 +442,7 @@ export class UI {
       <ul>
         <li><b>Lavoura:</b> enxada → semente → regue. Cada cultura tem temperatura ideal; veja o calendário na janela do tempo.</li>
         <li><b>Pasto:</b> plante capim no campo. Pasto formado alimenta muito mais que o nativo.</li>
-        <li><b>Animais:</b> feche um pasto com cerca e porteira, com água (bebedouro ou rio). Laçe os bichos soltos e solte no pasto. Macho e fêmea juntos dão cria.</li>
+        <li><b>Animais:</b> feche um pasto com cerca e porteira, com água (bebedouro ou rio). Laçe até 4 bichos de uma vez; para soltar, clique no animal com o laço. Macho e fêmea juntos dão cria.</li>
         <li><b>Mercado:</b> só na cooperativa. Guarde grãos para vender na entressafra; leite precisa ir no mesmo dia.</li>
         <li><b>Clima:</b> chuva e calor mudam a umidade; geada no inverno pode matar café e pimenta.</li>
         <li><b>Cavalo:</b> laçe um (ou compre), solte no pasto e aperte <kbd>X</kbd> perto dele para montar. A cavalo você corre mais e laça melhor.</li>

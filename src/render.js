@@ -114,11 +114,11 @@ export class Renderer {
       }
     }
     // corda do laço
-    const led = g.player.led != null && g.animals.find(a => a.id === g.player.led);
-    if (led) {
-      ctx.strokeStyle = '#d9c38a'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#d9c38a'; ctx.lineWidth = 1;
+    for (const led of g.animals) {
+      if (!led.led) continue;
       ctx.beginPath(); ctx.moveTo(p.x * T + 6, p.y * T - 12);
-      ctx.quadraticCurveTo((p.x + led.x) / 2 * T, (p.y + led.y) / 2 * T, led.x * T, led.y * T - 10);
+      ctx.quadraticCurveTo((p.x + led.x) / 2 * T, (p.y + led.y) / 2 * T + 6, led.x * T, led.y * T - 10);
       ctx.stroke();
     }
 

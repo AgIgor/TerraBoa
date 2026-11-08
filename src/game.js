@@ -101,7 +101,6 @@ export function deserialize(json) {
   g.rng = new RNG(0); g.rng.s = o.rngState;
   delete g.rngState;
   g.world = worldFromJSON(o.world);
-  g.player.led = null;
   g.workers ||= []; g.vehicles ||= [];
   g.player.mount ||= null;
   ensureMarket(g.market, dayOf(g));

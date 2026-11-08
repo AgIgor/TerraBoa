@@ -2,6 +2,21 @@
 import { MAP_W, MAP_H, G, O, BLOCK_ANIMAL, BLOCK_PLAYER, GRASS_CAP } from './config.js';
 import { RNG, makeNoise } from './rng.js';
 
+const FULL = [[0, 1, 0, 1]];
+// [x0, x1, y0, y1] dentro do tile
+const SHAPES = {
+  [O.TREE]: [[0.32, 0.68, 0.58, 0.95]],      // só o tronco
+  [O.BUSH]: [[0.18, 0.82, 0.42, 0.88]],
+  [O.ROCK]: [[0.16, 0.84, 0.42, 0.86]],
+  [O.TROUGH]: [[0.06, 0.94, 0.4, 0.82]],
+  [O.FEEDER]: [[0.06, 0.94, 0.4, 0.88]],
+  [O.SPRINKLER]: [[0.4, 0.6, 0.55, 0.9]],
+  [O.PAIOL]: [[0.04, 0.96, 0.3, 0.9]],
+  [O.SILO]: [[0.06, 0.94, 0.2, 0.95]],
+  [O.HOUSE]: FULL,
+  [O.COOP]: FULL,
+};
+
 export class World {
   constructor(w = MAP_W, h = MAP_H) {
     this.w = w; this.h = h;
@@ -32,6 +47,34 @@ export class World {
     if (!this.inside(x, y)) return false;
     const i = this.idx(x, y);
     return this.ground[i] !== G.WATER && !BLOCK_PLAYER.has(this.obj[i]);
+  }
+  // Colisão fina do jogador: cada objeto bloqueia só a parte desenhada (pé/base),
+  // em coordenadas locais do tile (0..1). Casas e água bloqueiam o tile todo.
+  solidRects(x, y) {
+    if (!this.inside(x, y)) return FULL;
+    const i = this.idx(x, y);
+    if (this.ground[i] === G.WATER) return FULL;
+    const o = this.obj[i];
+    if (o === O.FENCE) {
+      const r = [[0.4, 0.6, 0.6, 0.86]]; // poste
+      const fl = (nx, ny) => this.inside(nx, ny) && (this.obj[this.idx(nx, ny)] === O.FENCE || this.obj[this.idx(nx, ny)] === O.GATE);
+      if (fl(x + 1, y)) r.push([0.5, 1, 0.62, 0.82]);
+      if (fl(x - 1, y)) r.push([0, 0.5, 0.62, 0.82]);
+      if (fl(x, y - 1)) r.push([0.42, 0.58, 0, 0.7]);
+      if (fl(x, y + 1)) r.push([0.42, 0.58, 0.6, 1]);
+      return r;
+    }
+    return SHAPES[o] || null;
+  }
+  playerFree(px, py, rx = 0.2, top = 0.1, bot = 0.06) {
+    const x0 = px - rx, x1 = px + rx, y0 = py - top, y1 = py + bot;
+    for (let ty = Math.floor(y0); ty <= Math.floor(y1); ty++) for (let tx = Math.floor(x0); tx <= Math.floor(x1); tx++) {
+      const rects = this.solidRects(tx, ty);
+      if (!rects) continue;
+      for (const [a, b, c, d] of rects)
+        if (x1 > tx + a && x0 < tx + b && y1 > ty + c && y0 < ty + d) return false;
+    }
+    return true;
   }
   nearWater(x, y, r = 1) {
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {

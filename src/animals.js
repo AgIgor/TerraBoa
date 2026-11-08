@@ -86,14 +86,20 @@ const tileOf = a => [Math.floor(a.x), Math.floor(a.y)];
 // --- movimento por quadro (dt em segundos reais já multiplicado pela velocidade) ---
 export function updateAnimals(g, dt) {
   const w = g.world, p = g.player;
+  const chain = g.animals.filter(a => a.led).sort((a, b) => (a.ledSeq || 0) - (b.ledSeq || 0));
   for (const a of g.animals) {
     const d = ANIMALS[a.sp];
     if (a.ridden) { a.x = p.x; a.y = p.y + 0.01; a.face = p.fx >= 0 ? 1 : -1; if (p.moving) a.step += dt * 9; continue; }
     if (a.led) {
-      const tx = p.x - p.fx * 0.9, ty = p.y - p.fy * 0.9;
+      // segue quem está na frente da fila, mantendo distância
+      const k = chain.indexOf(a);
+      const lead = k <= 0 ? p : chain[k - 1];
+      const gap = k <= 0 ? 0.75 + d.size * 0.3 : 0.45 + (d.size + ANIMALS[lead.sp].size) * 0.35;
+      const ddx = a.x - lead.x, ddy = a.y - lead.y, dd = Math.hypot(ddx, ddy) || 1;
+      const tx = lead.x + ddx / dd * gap, ty = lead.y + ddy / dd * gap;
       const dx = tx - a.x, dy = ty - a.y, dist = Math.hypot(dx, dy);
-      if (dist > 0.25) {
-        const sp = Math.min(dist, (dist > 2 ? 9 : 5) * dt);
+      if (dist > 0.08) {
+        const sp = Math.min(dist, (dist > 2 ? 9 : 6) * dt);
         a.x += dx / dist * sp; a.y += dy / dist * sp;
         if (Math.abs(dx) > 0.05) a.face = dx > 0 ? 1 : -1;
         a.step += sp * 4;

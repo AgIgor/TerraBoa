@@ -2,7 +2,7 @@
 import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED } from './config.js';
 import { newGame, advance, serialize, deserialize, dayOf, hourOf, SAVE_KEY } from './game.js';
 import { updateAnimals } from './animals.js';
-import { useTool, animalAt, ledAnimal, mountAt, dismount } from './actions.js';
+import { useTool, animalAt, mountAt, dismount } from './actions.js';
 import { updateWorkers } from './workers.js';
 import { Renderer } from './render.js';
 import { UI } from './ui.js';
@@ -75,6 +75,7 @@ cv.addEventListener('pointerleave', () => { mouse.inside = false; ui.tip(0, 0, n
 cv.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch' && joy.id === e.pointerId) return;
   mouse.x = e.clientX; mouse.y = e.clientY; mouse.down = true; mouse.inside = true;
+  pinTip();
   if (e.button === 2) { act('mao', false); mouse.down = false; return; }
   mouse.lastTile = null;
   dragUse(true);
@@ -197,12 +198,9 @@ function movePlayer(dt) {
   const speed = p.mount ? SPEED[p.mount.kind] : p.sneak ? SPEED.sneak : SPEED.walk;
   if (p.mount) p.sneak = false;
   const sx = mx * speed * dt, sy = my * speed * dt;
-  const free = (x, y) => {
-    const r = 0.26;
-    for (const [cx, cy] of [[x - r, y - 0.18], [x + r, y - 0.18], [x - r, y + 0.12], [x + r, y + 0.12]])
-      if (!w.walkablePlayer(Math.floor(cx), Math.floor(cy))) return false;
-    return true;
-  };
+  // pés do jogador: caixa pequena; montado, a caixa é mais larga
+  const rx = p.mount ? 0.32 : 0.18;
+  const free = (x, y) => w.playerFree(x, y, rx, 0.1, 0.06);
   if (free(p.x + sx, p.y)) p.x += sx;
   if (free(p.x, p.y + sy)) p.y += sy;
   p.x = Math.max(0.3, Math.min(w.w - 0.3, p.x));
@@ -213,6 +211,13 @@ function movePlayer(dt) {
   const ex = Math.floor(p.x), ey = Math.floor(p.y);
   const e = w.drops.findIndex(d => d.x === ex && d.y === ey);
   if (e >= 0) { const n = w.drops[e].n; w.drops.splice(e, 1); g.inv.ovos = (g.inv.ovos || 0) + n; ui.toast(`+${n} ovos`, 'good'); }
+}
+
+let tipPin = null;
+function pinTip() {
+  const t = mouseTarget();
+  tipPin = { sx: mouse.x, sy: mouse.y, tx: t.x, ty: t.y, animal: animalAt(g, t.px, t.py, 0.75), until: performance.now() + 4000 };
+  hudT = 0;
 }
 
 // ---------- laço principal ----------
@@ -246,8 +251,12 @@ function frame(now) {
   if (hudT <= 0) {
     hudT = 0.25;
     ui.update();
-    if (mouse.inside && !ui.isOpen() && !isTouch) ui.tip(mouse.x, mouse.y, ui.tileInfo(target.x, target.y, hoverAnimal));
-    else ui.tip(0, 0, null);
+    // dica só depois de um clique: fica parada e some ao afastar o mouse ou com o tempo
+    const pin = tipPin;
+    if (pin && !ui.isOpen() && now < pin.until && Math.hypot(mouse.x - pin.sx, mouse.y - pin.sy) < 90) {
+      const a = pin.animal && g.animals.includes(pin.animal) ? pin.animal : null;
+      ui.tip(pin.sx, pin.sy, ui.tileInfo(pin.tx, pin.ty, a));
+    } else { tipPin = null; ui.tip(0, 0, null); }
   }
   requestAnimationFrame(frame);
 }

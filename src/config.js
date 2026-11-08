@@ -168,6 +168,7 @@ export const TROUGH_MAX = 10;
 export const FEEDER_MAX = 12;
 export const REACH = 2.6; // alcance das ferramentas, em tiles
 export const LASSO_REACH = 4.5;
+export const MAX_LED = 4; // animais no laço ao mesmo tempo
 
 // Armazenagem de grãos (sacas de milho, soja e café). A casa guarda pouco.
 export const GRAINS = ['milho', 'soja', 'cafe'];

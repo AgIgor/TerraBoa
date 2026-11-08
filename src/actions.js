@@ -1,7 +1,7 @@
 // O que cada ferramenta faz num tile. Retorna { ok, msg, kind, open } ou null.
 import {
   G, O, CROPS, TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, REGADOR_MAX, TROUGH_MAX, FEEDER_MAX,
-  FEED_VALUE, ANIMALS, LASSO_REACH, DIESEL_PER_TILE,
+  FEED_VALUE, ANIMALS, LASSO_REACH, DIESEL_PER_TILE, MAX_LED,
 } from './config.js';
 import { hourOf, sleep } from './game.js';
 import { animalLabel, settleAnimal, isAdult, startFlee } from './animals.js';
@@ -17,7 +17,8 @@ export function animalAt(g, px, py, radius = 0.7) {
   return best;
 }
 
-export function ledAnimal(g) { return g.player.led != null ? g.animals.find(a => a.id === g.player.led) : null; }
+// Animais no laço, na ordem em que foram laçados (o primeiro vai logo atrás do jogador)
+export function ledList(g) { return g.animals.filter(a => a.led).sort((a, b) => (a.ledSeq || 0) - (b.ledSeq || 0)); }
 
 function hasAnimalOn(g, x, y) { return g.animals.some(a => Math.floor(a.x) === x && Math.floor(a.y) === y); }
 
@@ -147,7 +148,6 @@ export function mountAt(g, px, py) {
   if (v) { p.mount = { kind: 'trator', id: v.id }; p.x = v.x; p.y = v.y; return say('No trator: arar, plantar e adubar fazem 3×3. X desce.', 'good'); }
   const a = animalAt(g, px, py, 0.9);
   if (a && a.sp === 'cavalo' && a.owned && !a.led && isAdult(a)) {
-    if (p.led != null) return say('Solte o animal do laço antes de montar.', 'bad');
     a.ridden = true; a.path = []; p.mount = { kind: 'cavalo', id: a.id }; p.x = a.x; p.y = a.y;
     return say(`Montou ${a.sex === 'f' ? 'na égua' : 'no cavalo'}. X desce.`, 'good');
   }
@@ -276,27 +276,28 @@ function build(g, x, y) {
 
 function lasso(g, x, y, px, py) {
   const w = g.world, p = g.player;
-  const led = ledAnimal(g);
-  if (led) {
-    const i = w.idx(x, y);
-    if (!w.walkableAnimal(i)) return say('Solte o animal num lugar livre.', 'bad');
-    led.x = x + 0.5; led.y = y + 0.5; led.led = false; p.led = null; led.path = [];
-    settleAnimal(w, led);
-    led.owned = true;
-    const ci = w.comp[w.idx(Math.floor(led.x), Math.floor(led.y))];
-    if (w.compOpen.has(ci)) return say(`${animalLabel(led)} solto, mas a área não está cercada: ele pode fugir!`, 'bad');
-    return say(`${animalLabel(led)} solto no pasto`, 'good');
-  }
   const a = animalAt(g, px, py, 1.1);
   if (!a || a.ridden) return say('Mire num animal.', 'bad');
+  // clicar num animal que está no laço solta ele ali
+  if (a.led) {
+    a.led = false; a.path = [];
+    settleAnimal(w, a);
+    a.owned = true;
+    const ci = w.comp[w.idx(Math.floor(a.x), Math.floor(a.y))];
+    if (w.compOpen.has(ci)) return say(`${animalLabel(a)} solto, mas a área não está cercada: ele pode fugir!`, 'bad');
+    return say(`${animalLabel(a)} solto no pasto`, 'good');
+  }
   if (Math.hypot(a.x - p.x, a.y - p.y) > LASSO_REACH) return say('Longe demais para o laço.', 'bad');
-  if (a.owned) { a.led = true; a.path = []; p.led = a.id; return say(`Levando ${animalLabel(a).toLowerCase()}`); }
+  const n = ledList(g).length;
+  if (n >= MAX_LED) return say(`Já está levando ${n} animais. Clique num deles para soltar.`, 'bad');
+  const take = () => { a.led = true; a.path = []; a.fleeing = 0; a.ledSeq = g.nextId++; };
+  if (a.owned) { take(); return say(`Levando ${animalLabel(a).toLowerCase()} (${n + 1} no laço)`); }
   const onHorse = p.mount?.kind === 'cavalo';
   const chance = Math.min(0.95, ANIMALS[a.sp].catch * (p.sneak ? 1.25 : 1) * (onHorse ? 1.45 : 1) * (a.fleeing > 0 && !onHorse ? 0.6 : 1));
   if (g.rng.chance(chance)) {
-    a.led = true; a.path = []; a.fleeing = 0; p.led = a.id;
+    take();
     const lb = animalLabel(a).toLowerCase();
-    return say(`Laçou ${/a$/.test(lb) ? 'uma' : 'um'} ${lb}! Leve para o pasto cercado.`, 'good');
+    return say(`Laçou ${/a$/.test(lb) ? 'uma' : 'um'} ${lb}! (${n + 1} no laço) Clique nele com o laço para soltar.`, 'good');
   }
   if (!a.owned) startFlee(g, a);
   return say('Errou o laço! O animal se assustou.', 'bad');

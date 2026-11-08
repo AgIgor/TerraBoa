@@ -1,5 +1,5 @@
 // Desenha o mundo no canvas: chão, objetos ordenados por profundidade, bichos, clima e luz.
-import { TILE, G, O, CROPS, ANIMALS, TROUGH_MAX, FEEDER_MAX, YEAR_DAYS, DAYS_PER_SEASON } from './config.js';
+import { TILE, G, O, CROPS, ANIMALS, TROUGH_MAX, FEEDER_MAX, YEAR_DAYS, DAYS_PER_SEASON, SPRINKLER } from './config.js';
 import { groundSprite, wetTilled, treeSprite, bushSprite, rockSprite, cropSprite, houseSprite, coopSprite, tileHash } from './art.js';
 import { cropStage } from './sim.js';
 import { rainAt, tempAt } from './climate.js';
@@ -232,14 +232,14 @@ export class Renderer {
       case O.SPRINKLER: {
         ctx.fillStyle = '#5a5f66'; ctx.fillRect(px + 15, py + 10, 3, 18);
         ctx.fillStyle = '#c0c4c8'; ctx.fillRect(px + 12, py + 8, 9, 4);
-        const on = (hour >= 6 && hour < 7) || (hour >= 17 && hour < 18);
-        if (on && w.nearWater(x, y, 8)) {
+        const on = SPRINKLER.hours.some(h => hour >= h && hour < h + 1);
+        if (on && w.nearWater(x, y, SPRINKLER.water)) {
           const a = now / 300;
           ctx.strokeStyle = 'rgba(160,210,255,0.7)'; ctx.lineWidth = 1;
           for (let k = 0; k < 6; k++) {
             const ang = a + k * Math.PI / 3;
             ctx.beginPath(); ctx.moveTo(px + 16, py + 9);
-            ctx.quadraticCurveTo(px + 16 + Math.cos(ang) * 30, py - 14 + Math.sin(ang) * 10, px + 16 + Math.cos(ang) * 62, py + 16 + Math.sin(ang) * 50);
+            ctx.quadraticCurveTo(px + 16 + Math.cos(ang) * 30, py - 18 + Math.sin(ang) * 14, px + 16 + Math.cos(ang) * 94, py + 16 + Math.sin(ang) * 80);
             ctx.stroke();
           }
         }

@@ -72,42 +72,44 @@ export const ANIMALS = {
   gado: {
     name: 'Gado', male: 'Boi', female: 'Vaca', young: 'Bezerro',
     forage: 1.2, water: 1.0, speed: 1.1, flee: 3.0, catch: 0.55,
-    birthW: [35, 45], adultW: 300, maxW: 560, gain: 5, gestation: 16, litter: [1, 1], breed: 0.08,
+    birthW: [35, 45], adultW: 300, maxW: 560, gain: 5, gestation: 12, litter: [1, 1], breed: 0.16,
     heat: 32, cold: -5, size: 1.0, market: 'boi', sell: 'arroba', milk: 8, milkItem: 'leite',
   },
   porco: {
     name: 'Porco', male: 'Porco', female: 'Porca', young: 'Leitão',
     forage: 0.4, water: 0.5, speed: 1.2, flee: 2.6, catch: 0.5,
-    birthW: [1.5, 2.5], adultW: 80, maxW: 140, gain: 5, gestation: 8, litter: [2, 4], breed: 0.12,
+    birthW: [1.5, 2.5], adultW: 80, maxW: 140, gain: 5, gestation: 7, litter: [2, 4], breed: 0.22,
     heat: 28, cold: 0, size: 0.7, market: 'porco', sell: 'kg',
   },
   galinha: {
     name: 'Galinha', male: 'Galo', female: 'Galinha', young: 'Pintinho',
     forage: 0.08, water: 0.1, speed: 1.5, flee: 2.2, catch: 0.42,
-    birthW: [0.05, 0.06], adultW: 1.6, maxW: 2.6, gain: 0.35, gestation: 5, litter: [1, 3], breed: 0.15,
+    birthW: [0.05, 0.06], adultW: 1.6, maxW: 2.6, gain: 0.35, gestation: 4, litter: [1, 3], breed: 0.28,
     heat: 30, cold: 8, size: 0.38, market: 'frango', sell: 'cabeca',
   },
   cavalo: {
     name: 'Cavalo', male: 'Cavalo', female: 'Égua', young: 'Potro',
     forage: 1.0, water: 0.9, speed: 1.7, flee: 3.6, catch: 0.38,
-    birthW: [35, 45], adultW: 380, maxW: 480, gain: 4, gestation: 20, litter: [1, 1], breed: 0.05,
+    birthW: [35, 45], adultW: 380, maxW: 480, gain: 4, gestation: 14, litter: [1, 1], breed: 0.1,
     heat: 33, cold: -5, size: 1.05, market: 'cavalo', sell: 'cabeca',
   },
   ovelha: {
     name: 'Ovelha', male: 'Carneiro', female: 'Ovelha', young: 'Cordeiro',
     forage: 0.25, water: 0.3, speed: 1.2, flee: 2.6, catch: 0.5,
-    birthW: [3, 5], adultW: 40, maxW: 70, gain: 2.5, gestation: 10, litter: [1, 2], breed: 0.1,
+    birthW: [3, 5], adultW: 40, maxW: 70, gain: 2.5, gestation: 8, litter: [1, 2], breed: 0.2,
     heat: 29, cold: -6, size: 0.6, market: 'cordeiro', sell: 'kg', wool: 0.3,
   },
   cabra: {
     name: 'Cabra', male: 'Bode', female: 'Cabra', young: 'Cabrito',
     forage: 0.25, water: 0.25, speed: 1.35, flee: 2.6, catch: 0.5,
-    birthW: [2.5, 4], adultW: 38, maxW: 62, gain: 2.3, gestation: 10, litter: [1, 2], breed: 0.1,
+    birthW: [2.5, 4], adultW: 38, maxW: 62, gain: 2.3, gestation: 8, litter: [1, 2], breed: 0.2,
     heat: 35, cold: 0, size: 0.55, market: 'caprino', sell: 'kg', milk: 2.2, milkItem: 'leite_cabra',
   },
 };
 // 1 saca de milho (ou de ração) vale 0,8 unidade de pasto.
-export const FEED_VALUE = 0.8;
+// Quanto alimento (em unidades de pasto) cada saca rende no cocho. Ração é balanceada e rende mais.
+export const FEED_VALUE = { racao: 3, milho: 2 };
+export const HUNGER_HOURS = 40; // horas para um animal de barriga cheia ficar com fome total
 
 // Itens do inventário
 export const ITEMS = {
@@ -164,9 +166,11 @@ export const BUILD_LIST = [
   { id: 'silo', name: 'Silo', obj: O.SILO, cost: { silo: 1 } },
 ];
 
-export const REGADOR_MAX = 12;
+export const REGADOR_MAX = 20;
+// Aspersor: raio (tiles), horas em que liga e distância máxima até a água
+export const SPRINKLER = { r: 3, hours: [6, 12, 17], water: 12, moist: 0.8 };
 export const TROUGH_MAX = 10;
-export const FEEDER_MAX = 12;
+export const FEEDER_MAX = 30;
 export const REACH = 2.6; // alcance das ferramentas, em tiles
 export const LASSO_REACH = 4.5;
 export const MAX_LED = 4; // animais no laço ao mesmo tempo

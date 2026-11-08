@@ -112,8 +112,8 @@ function doJob(g, k) {
     const f = wd.feeders.get(j.i);
     const src = (g.inv.racao || 0) > 0 ? 'racao' : (g.inv.milho || 0) > 0 ? 'milho' : null;
     if (f && src) {
-      const n = Math.min(g.inv[src], 5, Math.floor((FEEDER_MAX - f.food) / FEED_VALUE));
-      g.inv[src] -= n; f.food += n * FEED_VALUE;
+      const n = Math.min(g.inv[src], 5, Math.floor((FEEDER_MAX - f.food) / FEED_VALUE[src]));
+      g.inv[src] -= n; f.food += n * FEED_VALUE[src];
     }
   }
 }

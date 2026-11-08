@@ -1,5 +1,5 @@
 // Animais: movimento (por quadro), necessidades (por hora) e produção/reprodução (por dia).
-import { ANIMALS, FEED_VALUE, G, O, TROUGH_MAX } from './config.js';
+import { ANIMALS, FEED_VALUE, G, O, TROUGH_MAX, HUNGER_HOURS } from './config.js';
 import { tempAt } from './climate.js';
 
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -189,19 +189,28 @@ function decide(g, a) {
 export function animalsHour(g, hour) {
   const w = g.world;
   for (const a of g.animals) {
-    if (a.led || a.ridden) { a.hunger = Math.max(0, a.hunger - 1 / 30); a.thirst = Math.max(0, a.thirst - 1 / 30); continue; }
+    if (a.led || a.ridden) { a.hunger = Math.max(0, a.hunger - 1 / (HUNGER_HOURS * 1.2)); a.thirst = Math.max(0, a.thirst - 1 / (HUNGER_HOURS * 1.2)); continue; }
     const d = ANIMALS[a.sp];
     const [x, y] = tileOf(a);
     if (!w.inside(x, y)) continue;
     const scale = Math.max(0.15, a.weight / d.adultW);
     const F = d.forage * Math.min(1.3, scale);
-    a.hunger = Math.max(0, a.hunger - 1 / 24);
-    a.thirst = Math.max(0, a.thirst - (1 / 24) * (tempAt(g.climate.days[0], hour) > 30 ? 1.4 : 1));
+    a.hunger = Math.max(0, a.hunger - 1 / HUNGER_HOURS);
+    a.thirst = Math.max(0, a.thirst - (1 / HUNGER_HOURS) * (tempAt(g.climate.days[0], hour) > 30 ? 1.4 : 1));
 
-    // comer: cocho primeiro, depois capim em volta, depois lavoura (estrago!)
-    let want = Math.min(1 - a.hunger, 2 / 24) * F;
+    // comer: primeiro o capim em volta, depois o cocho, por último a lavoura (estrago!)
+    let want = Math.min(1 - a.hunger, 3 / HUNGER_HOURS) * F;
     if (want > 0) {
-      const fi = adjacentTo(w, x, y, j => (w.feeders.get(j)?.food || 0) > 0);
+      for (let k = -1; k < 8 && want > 0; k++) {
+        const nx = k < 0 ? x : x + DIRS[k][0], ny = k < 0 ? y : y + DIRS[k][1];
+        if (!w.inside(nx, ny)) continue;
+        const j = w.idx(nx, ny);
+        if (!w.walkableAnimal(j) || w.grass[j] < 0.08) continue;
+        const take = Math.min((w.grass[j] - 0.04) * 0.5, want);
+        if (take <= 0) continue;
+        w.grass[j] -= take; a.hunger += take / F; want -= take;
+      }
+      const fi = want > 0 ? adjacentTo(w, x, y, j => (w.feeders.get(j)?.food || 0) > 0) : -1;
       if (fi >= 0) {
         const f = w.feeders.get(fi), take = Math.min(f.food, want);
         f.food -= take; a.hunger += take / F; want -= take;
@@ -217,15 +226,6 @@ export function animalsHour(g, hour) {
           g.flags.cropWarn = g.time;
           g.notify(`${a.owned ? 'Seu' : 'Um'} ${animalLabel(a).toLowerCase()} está comendo a lavoura! Cerque a plantação.`, 'bad');
         }
-      }
-      for (let k = -1; k < 8 && want > 0; k++) {
-        const nx = k < 0 ? x : x + DIRS[k][0], ny = k < 0 ? y : y + DIRS[k][1];
-        if (!w.inside(nx, ny)) continue;
-        const j = w.idx(nx, ny);
-        if (!w.walkableAnimal(j)) continue;
-        const take = Math.min(w.grass[j] * 0.5, want);
-        if (take <= 0) continue;
-        w.grass[j] -= take; a.hunger += take / F; want -= take;
       }
       a.hunger = Math.min(1, a.hunger);
     }
@@ -300,7 +300,7 @@ export function animalsDay(g, today) {
     } else if (a.sex === 'f' && isAdult(a) && fed > 0.5 && a.health > 0.6) {
       const c = w.comp[w.idx(x, y)];
       const hasMale = owned.some(b => b.sp === a.sp && b.sex === 'm' && isAdult(b) && w.comp[w.idx(Math.floor(b.x), Math.floor(b.y))] === c);
-      if (hasMale && r.chance(d.breed)) a.preg = d.gestation;
+      if (hasMale && r.chance(d.breed)) { a.preg = d.gestation; g.notify(`${animalLabel(a)} ficou prenhe! Nasce em ${d.gestation} dias.`, 'good'); }
     }
 
     // animal fora de cerca pode fugir

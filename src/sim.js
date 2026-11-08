@@ -1,5 +1,5 @@
 // Simulação da terra: umidade, lavouras, capim, regeneração natural. Sem DOM.
-import { G, O, CROPS, ITEMS, GRASS_CAP, GRASS_RATE, TROUGH_MAX, YEAR_DAYS, GRAINS, STORE_BASE, STORE_ADD, SPOIL } from './config.js';
+import { G, O, CROPS, ITEMS, GRASS_CAP, GRASS_RATE, TROUGH_MAX, YEAR_DAYS, GRAINS, STORE_BASE, STORE_ADD, SPOIL, SPRINKLER } from './config.js';
 import { workersDay } from './workers.js';
 import { tempAt, rainAt, climateNextDay, EVENT_TEXT, ENSO } from './climate.js';
 import { marketDay } from './market.js';
@@ -61,15 +61,16 @@ export function hourly(g, hour) {
   // chuva enche bebedouros
   if (rain) for (const t of w.troughs.values()) t.water = Math.min(TROUGH_MAX, t.water + rain * 0.08);
 
-  // aspersores ligam às 6h e às 17h
-  if (hour === 6 || hour === 17) for (const i of w.sprinklers) {
+  // aspersores ligam três vezes por dia e molham um 7x7 (se houver água por perto)
+  if (SPRINKLER.hours.includes(hour)) for (const i of w.sprinklers) {
     const x = i % w.w, y = (i / w.w) | 0;
-    if (!w.nearWater(x, y, 8)) continue;
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    if (!w.nearWater(x, y, SPRINKLER.water)) continue;
+    const r = SPRINKLER.r;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const nx = x + dx, ny = y + dy;
       if (!w.inside(nx, ny)) continue;
       const j = w.idx(nx, ny);
-      w.moist[j] = Math.max(w.moist[j], 0.7);
+      w.moist[j] = Math.max(w.moist[j], SPRINKLER.moist);
     }
   }
 

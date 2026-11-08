@@ -1,42 +1,54 @@
 // Liga tudo: jogo, desenho, interface e controles.
 import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED, BUSH_SLOW, G, O } from './config.js';
 import { burst, treeFall, shakeTile } from './fx.js';
-import { newGame, advance, serialize, deserialize, dayOf, hourOf, SAVE_KEY } from './game.js';
+import { newGame, advance, dayOf, hourOf } from './game.js';
+import * as Saves from './saves.js';
 import { updateAnimals } from './animals.js';
 import { useTool, animalAt, mountAt, dismount } from './actions.js';
 import { updateWorkers } from './workers.js';
 import { Renderer } from './render.js';
 import { UI } from './ui.js';
 
-let g = load() || newGame();
+// Começa com o save automático (ou um mapa novo) desenhado ao fundo da tela inicial.
+let g = Saves.loadFrom(Saves.AUTO) || newGame();
+let started = false; // só salva depois que o jogador entrou no jogo
 const R = new Renderer(document.getElementById('game'));
 const ui = new UI(g);
 hook(g);
 ui.refreshTools();
-if (!g.flags.welcomed) {
-  g.flags.welcomed = true;
-  setTimeout(() => ui.open('menu'), 300);
-}
+ui.showTitle();
 
 function hook(game) {
   game.onNotify = (t, k) => ui.toast(t, k);
 }
-ui.onSave = save;
-ui.onNew = () => {
-  try { localStorage.removeItem(SAVE_KEY); } catch {}
-  g = newGame(); hook(g); ui.setGame(g);
-  g.flags.welcomed = true;
-  ui.toast('Novo jogo. Boa sorte na roça!', 'good');
+function setGame(ng) {
+  g = ng; hook(g); ui.setGame(g);
+  lastDay = dayOf(g); tipPin = null; R.camInit = false; keys.clear();
+}
+ui.onTitle = (act, arg) => {
+  if (act === 'continue') { started = true; return true; }
+  if (act === 'new') {
+    const seed = /^\d+$/.test(arg || '') ? +arg : undefined;
+    setGame(newGame(seed));
+    started = true; save();
+    ui.toast('Novo jogo. Boa sorte na roça!', 'good');
+    setTimeout(() => ui.open('menu', { tab: 'ajuda' }), 400);
+    return true;
+  }
+  if (act === 'load') return loadSlot(arg);
 };
+function loadSlot(key) {
+  const ng = Saves.loadFrom(key);
+  if (!ng) { ui.toast('Não foi possível abrir esse save.', 'bad'); return false; }
+  setGame(ng); started = true;
+  if (key !== Saves.AUTO) save(); // o carregado vira o jogo atual do automático
+  return true;
+}
+ui.onLoadSlot = loadSlot;
+ui.onSave = save;
 
 function save() {
-  try { localStorage.setItem(SAVE_KEY, serialize(g)); } catch (e) { console.warn('save falhou', e); }
-}
-function load() {
-  try {
-    const s = localStorage.getItem(SAVE_KEY);
-    return s ? deserialize(s) : null;
-  } catch (e) { console.warn('save inválido', e); return null; }
+  if (started) Saves.saveTo(Saves.AUTO, g);
 }
 window.addEventListener('beforeunload', save);
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
@@ -49,7 +61,7 @@ const isTouch = matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('touch');
 
 addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
+  if (e.target.tagName === 'INPUT' || ui.titleOpen) return;
   const k = e.key.toLowerCase();
   if (k === 'escape') { if (ui.isOpen()) ui.close(); else if (R.overlay) setOverlay(null); return; }
   if (ui.isOpen() && !['m', 't', 'f', 'h'].includes(k)) return;
@@ -72,7 +84,7 @@ addEventListener('blur', () => keys.clear());
 
 const cv = R.cv;
 cv.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.inside = true; if (mouse.down) dragUse(); });
-cv.addEventListener('pointerleave', () => { mouse.inside = false; ui.tip(0, 0, null); });
+cv.addEventListener('pointerleave', () => { mouse.inside = false; });
 cv.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch' && joy.id === e.pointerId) return;
   mouse.x = e.clientX; mouse.y = e.clientY; mouse.down = true; mouse.inside = true;
@@ -267,7 +279,7 @@ function movePlayer(dt) {
 let tipPin = null;
 function pinTip() {
   const t = mouseTarget();
-  tipPin = { sx: mouse.x, sy: mouse.y, tx: t.x, ty: t.y, animal: animalAt(g, t.px, t.py, 0.75), until: performance.now() + 4000 };
+  tipPin = { sx: mouse.x, sy: mouse.y, tx: t.x, ty: t.y, animal: animalAt(g, t.px, t.py, 0.75), until: performance.now() + 7000 };
   hudT = 0;
 }
 
@@ -302,12 +314,12 @@ function frame(now) {
   if (hudT <= 0) {
     hudT = 0.25;
     ui.update();
-    // dica só depois de um clique: fica parada e some ao afastar o mouse ou com o tempo
+    // informações do último tile clicado, num painel fixo no topo; somem depois de alguns segundos
     const pin = tipPin;
-    if (pin && !ui.isOpen() && now < pin.until && Math.hypot(mouse.x - pin.sx, mouse.y - pin.sy) < 90) {
+    if (pin && !ui.isOpen() && now < pin.until) {
       const a = pin.animal && g.animals.includes(pin.animal) ? pin.animal : null;
-      ui.tip(pin.sx, pin.sy, ui.tileInfo(pin.tx, pin.ty, a));
-    } else { tipPin = null; ui.tip(0, 0, null); }
+      ui.tip(ui.tileInfo(pin.tx, pin.ty, a));
+    } else { tipPin = null; ui.tip(null); }
   }
   requestAnimationFrame(frame);
 }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Terra Boa</title>
-  <link rel="stylesheet" href="style.css?v=220d7a50">
+  <link rel="stylesheet" href="style.css?v=51fbf79a">
 </head>
 <body>
   <div id="game"></div>
@@ -45,6 +45,14 @@
     <button id="tMount">Montar</button>
   </div>
 
+  <div id="title" class="hidden">
+    <div class="tcard">
+      <div class="tlogo">Terra<b>Boa</b></div>
+      <p class="tsub">Uma fazenda no cerrado: pasto, lavoura, criação, clima e mercado de verdade.</p>
+      <div id="tBody"></div>
+    </div>
+  </div>
+
   <div id="modal" class="hidden">
     <div class="sheet">
       <header><h2 id="mTitle"></h2><button id="mClose" title="Fechar (Esc)">✕</button></header>
@@ -53,27 +61,28 @@
     </div>
   </div>
 
-    <script type="importmap">
+        <script type="importmap">
 {
   "imports": {
-    "./src/actions.js": "./src/actions.js?v=b20669df",
-    "./src/animals.js": "./src/animals.js?v=141f4742",
+    "./src/actions.js": "./src/actions.js?v=a32e1075",
+    "./src/animals.js": "./src/animals.js?v=f144e3b3",
     "./src/art.js": "./src/art.js?v=6878d9f4",
     "./src/climate.js": "./src/climate.js?v=1814cb9f",
-    "./src/config.js": "./src/config.js?v=42d56044",
+    "./src/config.js": "./src/config.js?v=bb7d5d1b",
     "./src/fx.js": "./src/fx.js?v=5f4b7204",
     "./src/game.js": "./src/game.js?v=86462c64",
-    "./src/main.js": "./src/main.js?v=3b95d296",
-    "./src/market.js": "./src/market.js?v=432d0abe",
-    "./src/render.js": "./src/render.js?v=cd43a346",
+    "./src/main.js": "./src/main.js?v=0ab541b9",
+    "./src/market.js": "./src/market.js?v=087675c0",
+    "./src/render.js": "./src/render.js?v=60436967",
     "./src/rng.js": "./src/rng.js?v=29d4486e",
-    "./src/sim.js": "./src/sim.js?v=5b7a5a1c",
-    "./src/ui.js": "./src/ui.js?v=f9c1c306",
-    "./src/workers.js": "./src/workers.js?v=81144f66",
+    "./src/saves.js": "./src/saves.js?v=f2a1b708",
+    "./src/sim.js": "./src/sim.js?v=967dd51f",
+    "./src/ui.js": "./src/ui.js?v=5fcb236f",
+    "./src/workers.js": "./src/workers.js?v=1e40a3b2",
     "./src/world.js": "./src/world.js?v=fd8fd8a8"
   }
 }
 </script>
-  <script type="module" src="src/main.js?v=3b95d296"></script>
+  <script type="module" src="src/main.js?v=0ab541b9"></script>
 </body>
 </html>

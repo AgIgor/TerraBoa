@@ -6,6 +6,7 @@ import { tempAt, weatherLabel, weatherIcon, ENSO, seasonParams, EVENT_TEXT, wind
 import { animalLabel, animalValue, animalMarketQty, isAdult, makeAnimal } from './animals.js';
 import { fTemp, cropStage, storageCap, grainStock } from './sim.js';
 import { hireWorker, fireWorker } from './workers.js';
+import * as Saves from './saves.js';
 
 const $ = id => document.getElementById(id);
 const fmt = v => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -24,6 +25,14 @@ export class UI {
     this.atCoop = false;
     this.buildHotbar();
     $('mClose').onclick = () => this.close();
+    const body = $('mBody');
+    body.addEventListener('click', e => {
+      const b = e.target.closest('[data-act]');
+      if (b && !b.disabled) this.act(b.dataset.act, b.dataset, b);
+    });
+    $('modal').addEventListener('pointerdown', () => { this.pressing = true; });
+    addEventListener('pointerup', () => { this.pressing = false; });
+    addEventListener('pointercancel', () => { this.pressing = false; });
     $('modal').addEventListener('pointerdown', e => { if (e.target.id === 'modal') this.close(); });
     $('speeds').addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -142,20 +151,19 @@ export class UI {
     }
     if (html !== this.lastInv) { $('inv').innerHTML = html; this.lastInv = html; }
     this.refreshTools();
-    if (this.panel && this.live) this.render();
+    // atualização ao vivo: só o corpo, e nunca com o mouse apertado (senão o clique se perde)
+    if (this.panel && this.live && !this.pressing) this.renderBody();
   }
 
   // ---------- dica sob o cursor ----------
-  tip(sx, sy, info) {
+  // informações do tile clicado: painel fixo no topo, abaixo da barra
+  tip(info) {
     const el = $('tip');
-    if (!info) { el.style.display = 'none'; return; }
-    el.innerHTML = info;
+    if (!info) { el.style.display = 'none'; this.lastTip = null; return; }
+    if (info !== this.lastTip) { el.innerHTML = info; this.lastTip = info; }
     el.style.display = 'block';
-    const r = el.getBoundingClientRect();
-    let x = sx + 16, y = sy + 16;
-    if (x + r.width > innerWidth - 8) x = sx - r.width - 12;
-    if (y + r.height > innerHeight - 8) y = sy - r.height - 12;
-    el.style.left = x + 'px'; el.style.top = y + 'px';
+    const hud = $('hud').getBoundingClientRect();
+    el.style.top = (hud.bottom + 6) + 'px';
   }
   tileInfo(x, y, animal) {
     const g = this.g, w = g.world;
@@ -167,7 +175,7 @@ export class UI {
       let t = `<b>${OBJ_NAME[o]}</b>`;
       if (o === O.TROUGH) t += ` · água ${pct(w.troughs.get(i).water / TROUGH_MAX)}`;
       if (o === O.FEEDER) t += ` · ração ${pct(w.feeders.get(i).food / FEEDER_MAX)}`;
-      if (o === O.SPRINKLER) t += w.nearWater(x, y, 8) ? ' · liga às 6h e 17h' : ' · <span class="down">sem água por perto</span>';
+      if (o === O.SPRINKLER) t += w.nearWater(x, y, 12) ? ' · molha 7×7 às 6h, 12h e 17h' : ' · <span class="down">sem água a até 12 tiles</span>';
       if (o === O.HOUSE) t += '<br><span class="muted">Mão: dormir (após 19h)</span>';
       if (o === O.COOP) t += '<br><span class="muted">Mão: vender e comprar</span>';
       lines.push(t);
@@ -196,33 +204,91 @@ export class UI {
   open(name, opts = {}) {
     if (this.panel === name && !opts.force) { this.close(); return; }
     this.panel = name;
-    this.tab = opts.tab || ({ mercado: 'vender', fazenda: 'animais', tempo: 'previsao', menu: 'ajuda' })[name];
+    this.tab = opts.tab || ({ mercado: 'vender', fazenda: 'animais', tempo: 'previsao', menu: 'jogo' })[name];
     this.atCoop = !!opts.atCoop;
     $('modal').classList.remove('hidden');
     this.render();
   }
   close() { this.panel = null; $('modal').classList.add('hidden'); }
-  isOpen() { return !!this.panel; }
+  isOpen() { return !!this.panel || !!this.titleOpen; }
+
+  // ---------- tela inicial ----------
+  showTitle(view = 'main') {
+    this.close();
+    this.titleOpen = true;
+    $('title').classList.remove('hidden');
+    this.renderTitle(view);
+    if (!this.titleHooked) {
+      this.titleHooked = true;
+      $('tBody').addEventListener('click', e => {
+        const b = e.target.closest('[data-tact]');
+        if (!b || b.disabled) return;
+        const d = b.dataset;
+        if (d.tact === 'view') return this.renderTitle(d.view);
+        if (d.tact === 'continue') { this.hideTitle(); this.onTitle('continue'); }
+        if (d.tact === 'start') { const seed = $('tSeed').value.trim(); this.hideTitle(); this.onTitle('new', seed); }
+        if (d.tact === 'load') { if (this.onTitle('load', d.key)) this.hideTitle(); }
+        if (d.tact === 'del') {
+          if (d.confirm !== '1') { d.confirm = '1'; b.textContent = 'Confirmar'; return; }
+          Saves.remove(d.key); this.renderTitle('load');
+        }
+      });
+    }
+  }
+  hideTitle() { this.titleOpen = false; $('title').classList.add('hidden'); }
+  renderTitle(view) {
+    const body = $('tBody');
+    const saves = Saves.list();
+    const auto = saves[0];
+    const anySave = saves.some(s => !s.empty);
+    if (view === 'main') {
+      body.innerHTML = `
+        ${auto.empty ? '' : `<button class="tbtn primary" data-tact="continue">Continuar<small>${Saves.describe(auto)}</small></button>`}
+        <button class="tbtn ${auto.empty ? 'primary' : ''}" data-tact="view" data-view="new">Novo jogo<small>Um mapa novo, começando na primavera</small></button>
+        <button class="tbtn" data-tact="view" data-view="load" ${anySave ? '' : 'disabled'}>Carregar jogo<small>${anySave ? 'Automático e 3 espaços de save' : 'Nenhum jogo salvo ainda'}</small></button>
+        <button class="tbtn" data-tact="view" data-view="help">Como jogar<small>Controles e dicas</small></button>`;
+    } else if (view === 'new') {
+      body.innerHTML = `
+        <label class="tfield">Semente do mapa (opcional; a mesma semente gera o mesmo mapa)<input id="tSeed" inputmode="numeric" placeholder="aleatória"></label>
+        ${auto.empty ? '' : '<p class="note warn">O save automático atual será substituído. Para guardar este jogo, salve num espaço pelo Menu antes.</p>'}
+        <button class="tbtn primary" data-tact="start">Começar<small>R$ 600, sementes de milho, capim e madeira</small></button>
+        <button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
+    } else if (view === 'load') {
+      const names = { [Saves.AUTO]: 'Automático' };
+      body.innerHTML = `<div class="slots">${saves.map((s, k) => `<div class="slot-row"><div class="info"><b>${names[s.key] || 'Espaço ' + k}</b><span>${Saves.describe(s)}</span></div>
+        <div class="btns"><button data-tact="load" data-key="${s.key}" ${s.empty ? 'disabled' : ''}>Carregar</button>${s.empty ? '' : `<button data-tact="del" data-key="${s.key}">Apagar</button>`}</div></div>`).join('')}</div>
+        <button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
+    } else if (view === 'help') {
+      body.innerHTML = `<div class="thelp">${this.tab_menu_ajuda()}</div><button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
+    }
+  }
 
   render() {
     const g = this.g;
+    this.lastBody = null;
     const tabs = {
       mercado: [['vender', 'Vender'], ['insumos', 'Comprar insumos'], ['animais', 'Animais'], ['noticias', 'Notícias']],
       fazenda: [['animais', 'Rebanho'], ['lavouras', 'Lavouras'], ['peoes', 'Peões'], ['diario', 'Diário']],
       tempo: [['previsao', 'Previsão'], ['calendario', 'Calendário de plantio']],
-      menu: [['ajuda', 'Como jogar'], ['jogo', 'Jogo']],
+      menu: [['jogo', 'Salvar e carregar'], ['ajuda', 'Como jogar']],
     }[this.panel];
     const titles = { mercado: this.atCoop ? 'Cooperativa' : 'Mercado <small>(só consulta — vá até a cooperativa para negociar)</small>', fazenda: 'Fazenda', tempo: 'Tempo e clima', menu: 'Terra Boa' };
     $('mTitle').innerHTML = titles[this.panel];
     $('mTabs').innerHTML = tabs.map(([id, n]) => `<button data-t="${id}" class="${id === this.tab ? 'on' : ''}">${n}</button>`).join('');
     $('mTabs').querySelectorAll('button').forEach(b => b.onclick = () => { this.tab = b.dataset.t; this.render(); });
+    this.lastBody = null;
+    this.renderBody();
+  }
+  renderBody() {
     const body = $('mBody');
-    const scroll = body.scrollTop;
     this.live = false;
     const fn = this['tab_' + this.panel + '_' + this.tab];
-    body.innerHTML = fn ? fn.call(this, g) : '';
+    const html = fn ? fn.call(this, this.g) : '';
+    if (html === this.lastBody) return; // nada mudou: não recria os botões
+    this.lastBody = html;
+    const scroll = body.scrollTop;
+    body.innerHTML = html;
     body.scrollTop = scroll;
-    body.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { this.act(b.dataset.act, b.dataset, b); });
   }
 
   act(act, ds, el) {
@@ -278,6 +344,18 @@ export class UI {
       const k = g.workers.find(k => k.id === +ds.id);
       fireWorker(g, +ds.id);
       if (k) this.toast(`${k.name} foi dispensado.`);
+    } else if (act === 'saveslot') {
+      if (ds.confirm !== '1' && Saves.has(ds.key) && ds.key !== Saves.AUTO) { el.dataset.confirm = '1'; el.textContent = 'Confirmar'; return; }
+      Saves.saveTo(ds.key, g); this.toast('Jogo salvo.', 'good');
+    } else if (act === 'loadslot') {
+      if (this.onLoadSlot && this.onLoadSlot(ds.key)) { this.close(); this.toast('Jogo carregado.', 'good'); }
+      return;
+    } else if (act === 'delslot') {
+      if (ds.confirm !== '1') { el.dataset.confirm = '1'; el.textContent = 'Confirmar'; return; }
+      Saves.remove(ds.key);
+    } else if (act === 'title') {
+      this.onSave && this.onSave();
+      this.showTitle(); return;
     } else if (act === 'save') { this.onSave && this.onSave(); this.toast('Jogo salvo.', 'good'); }
     else if (act === 'new') {
       if (ds.confirm === '1') { this.onNew && this.onNew(); this.close(); return; }
@@ -456,9 +534,15 @@ export class UI {
       </ul></div></div>`;
   }
   tab_menu_jogo(g) {
-    return `<div class="card"><div class="kv"><span>Semente do mapa</span><b>${g.seed}</b></div><div class="kv"><span>Dias jogados</span><b>${g.stats.days}</b></div></div>
-      <p style="display:flex;gap:8px;margin-top:12px"><button class="btn primary" data-act="save">Salvar agora</button><button class="btn" data-act="new">Novo jogo</button></p>
-      <p class="note">O jogo salva sozinho no navegador a cada novo dia.</p>`;
+    const saves = Saves.list();
+    const names = { [Saves.AUTO]: 'Automático' };
+    return `<p class="note">O automático salva sozinho a cada dia e ao fechar a página. Use os espaços para guardar pontos da sua fazenda.</p>
+      <div class="slots">${saves.map((s, k) => `<div class="slot-row"><div class="info"><b>${names[s.key] || 'Espaço ' + k}</b><span>${Saves.describe(s)}</span></div>
+        <div class="btns"><button data-act="saveslot" data-key="${s.key}">${s.empty ? 'Salvar aqui' : 'Sobrescrever'}</button>
+        <button data-act="loadslot" data-key="${s.key}" ${s.empty ? 'disabled' : ''}>Carregar</button>
+        ${s.empty || s.key === Saves.AUTO ? '' : `<button data-act="delslot" data-key="${s.key}">Apagar</button>`}</div></div>`).join('')}</div>
+      <p style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" data-act="title">Tela inicial</button></p>
+      <div class="card" style="margin-top:10px"><div class="kv"><span>Semente do mapa</span><b>${g.seed}</b></div><div class="kv"><span>Dias jogados</span><b>${g.stats.days}</b></div></div>`;
   }
 }
 

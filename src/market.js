@@ -16,11 +16,12 @@ export const COMMODITIES = {
   frango:  { name: 'Galinha', unit: 'cabeça', base: 15,   amp: 0.06, peak: 14, vol: 0.020, depth: 60, animal: true },
   leite_cabra: { name: 'Leite de cabra', unit: 'litro', base: 4.2, amp: 0.12, peak: 44, vol: 0.025, depth: 120 },
   la:      { name: 'Lã', unit: 'kg', base: 9, amp: 0.14, peak: 34, vol: 0.035, depth: 80 },
+  madeira: { name: 'Madeira', unit: 'unidade', base: 1.6, amp: 0.06, peak: 30, vol: 0.02, depth: 300 },
   cavalo:  { name: 'Cavalo', unit: 'cabeça', base: 950, amp: 0.05, peak: 0, vol: 0.020, depth: 8, animal: true },
   cordeiro: { name: 'Cordeiro', unit: 'kg vivo', base: 5.5, amp: 0.10, peak: 22, vol: 0.030, depth: 400, animal: true },
   caprino: { name: 'Cabrito', unit: 'kg vivo', base: 5, amp: 0.08, peak: 14, vol: 0.030, depth: 400, animal: true },
 };
-export const SELLABLE = ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'la'];
+export const SELLABLE = ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'la', 'madeira'];
 
 // Insumos: preço ligado a uma commodity (semente cara quando o grão está caro).
 export const INPUTS = [
@@ -34,7 +35,7 @@ export const INPUTS = [
   { id: 'racao', name: 'Ração', pack: 10, link: 'milho', k: 1.25 },
   { id: 'madeira', name: 'Madeira', pack: 10, fixed: 2.5 },
   { id: 'bebedouro', name: 'Bebedouro', pack: 1, fixed: 45 },
-  { id: 'aspersor', name: 'Aspersor', pack: 1, fixed: 140, dollar: true },
+  { id: 'aspersor', name: 'Aspersor', pack: 1, fixed: 90, dollar: true },
   { id: 'silo', name: 'Silo metálico (kit)', pack: 1, fixed: 1150, dollar: true },
 ];
 
@@ -59,6 +60,7 @@ const NEWS = [
   { p: 0.003, text: 'Festa de Páscoa aquece venda de cordeiro', fx: { cordeiro: 0.12 } },
   { p: 0.003, text: 'Temporada de rodeios: cavalos valorizados', fx: { cavalo: 0.10 } },
   { p: 0.004, text: 'Diesel sobe nas bombas', fx: { dollar: 0.05 } },
+  { p: 0.004, text: 'Construção civil aquecida: madeira valoriza', fx: { madeira: 0.15 } },
 ];
 
 function seasonal(c, doy) { return 1 + c.amp * Math.cos(2 * Math.PI * (doy - c.peak) / YEAR_DAYS); }

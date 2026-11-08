@@ -17,6 +17,10 @@ Os módulos ES não funcionam abrindo o `index.html` direto do disco.
 - **Mercado:** cada produto tem sazonalidade de safra/entressafra, passeio aleatório, notícias (China, dólar, safra dos EUA, gripe aviária...), choques do clima (geada dispara o café) e o seu próprio volume de venda derrubando o preço. Vende-se na cooperativa. Leite azeda em um dia.
 - Dia/noite com lanterna, chuva com respingos, relâmpagos, neblina, ipês florindo no fim do inverno. Vento do dia balança copas, lavouras e arbustos; partículas com gravidade (lascas, folhas, terra, água), sombras de nuvem, fumaça da chaminé e câmera suave — técnicas trazidas do Mata Viva. Salva sozinho no navegador.
 
+## Saves
+
+Tela inicial com Continuar, Novo jogo (semente opcional), Carregar e Como jogar. Além do save automático (todo dia e ao fechar a página) há 3 espaços manuais em Menu › Salvar e carregar.
+
 ## Controles
 
 WASD/setas andam, Shift anda devagar, 1–8 ferramentas, Q/R trocam semente ou construção, clique (ou Espaço) usa, E é a mão, M mercado, T tempo, F fazenda, L mapas do solo, P pausa, roda do mouse dá zoom. No celular aparecem joystick e botões.

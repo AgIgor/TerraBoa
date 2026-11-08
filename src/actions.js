@@ -1,7 +1,7 @@
 // O que cada ferramenta faz num tile. Retorna { ok, msg, kind, open } ou null.
 import {
   G, O, CROPS, TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, REGADOR_MAX, TROUGH_MAX, FEEDER_MAX,
-  FEED_VALUE, ANIMALS, LASSO_REACH, DIESEL_PER_TILE, MAX_LED,
+  FEED_VALUE, ANIMALS, LASSO_REACH, DIESEL_PER_TILE, MAX_LED, SPRINKLER,
 } from './config.js';
 import { hourOf, sleep } from './game.js';
 import { animalLabel, settleAnimal, isAdult, startFlee } from './animals.js';
@@ -95,12 +95,12 @@ function hand(g, x, y, px, py) {
   // cocho: põe ração ou milho
   if (o === O.FEEDER) {
     const f = w.feeders.get(i);
-    const room = Math.floor((FEEDER_MAX - f.food) / FEED_VALUE);
-    if (room <= 0) return say('O cocho está cheio.');
     const src = (g.inv.racao || 0) > 0 ? 'racao' : (g.inv.milho || 0) > 0 ? 'milho' : null;
     if (!src) return say('Sem ração nem milho para pôr no cocho. Compre na cooperativa.', 'bad');
+    const room = Math.floor((FEEDER_MAX - f.food) / FEED_VALUE[src]);
+    if (room <= 0) return say('O cocho está cheio.');
     const n = Math.min(room, g.inv[src], 5);
-    g.inv[src] -= n; f.food += n * FEED_VALUE;
+    g.inv[src] -= n; f.food += n * FEED_VALUE[src];
     return say(`Pôs ${n} sc de ${ITEMS[src].name.toLowerCase()} no cocho`, 'good');
   }
   if (o === O.TROUGH) return say(`Bebedouro: ${Math.round(w.troughs.get(i).water / TROUGH_MAX * 100)}%. Use o regador para encher.`);
@@ -239,12 +239,13 @@ function water(g, x, y) {
   }
   if (w.obj[i] !== O.NONE) return null;
   if (p.water <= 0) return say('Regador vazio. Encha na água.', 'bad');
+  // regador molha bem o tile e um pouco em volta (3x3)
   p.water--;
-  w.moist[i] = Math.min(1, w.moist[i] + 0.5);
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    if (!w.inside(x + dx, y + dy)) continue;
+  w.moist[i] = Math.min(1, w.moist[i] + 0.6);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if ((!dx && !dy) || !w.inside(x + dx, y + dy)) continue;
     const j = w.idx(x + dx, y + dy);
-    w.moist[j] = Math.min(1, w.moist[j] + 0.2);
+    if (w.ground[j] !== G.WATER) w.moist[j] = Math.min(1, w.moist[j] + 0.35);
   }
   return say('');
 }
@@ -284,7 +285,8 @@ function build(g, x, y) {
   if (b.obj === O.FEEDER) w.feeders.set(i, { food: 0 });
   if (b.obj === O.SPRINKLER) {
     w.sprinklers.add(i);
-    if (!w.nearWater(x, y, 8)) return say('Aspersor instalado, mas não há água a até 8 tiles: ele não vai funcionar.', 'bad');
+    if (!w.nearWater(x, y, SPRINKLER.water)) return say(`Aspersor instalado, mas não há água a até ${SPRINKLER.water} tiles: ele não vai funcionar.`, 'bad');
+    return say(`Aspersor ligado: molha 7×7 às ${SPRINKLER.hours.join('h, ')}h.`, 'good');
   }
   return say('');
 }

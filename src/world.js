@@ -6,7 +6,6 @@ const FULL = [[0, 1, 0, 1]];
 // [x0, x1, y0, y1] dentro do tile
 const SHAPES = {
   [O.TREE]: [[0.32, 0.68, 0.58, 0.95]],      // só o tronco
-  [O.BUSH]: [[0.18, 0.82, 0.42, 0.88]],
   [O.ROCK]: [[0.16, 0.84, 0.42, 0.86]],
   [O.TROUGH]: [[0.06, 0.94, 0.4, 0.82]],
   [O.FEEDER]: [[0.06, 0.94, 0.4, 0.88]],
@@ -42,19 +41,20 @@ export class World {
   idx(x, y) { return y * this.w + x; }
   inside(x, y) { return x >= 0 && y >= 0 && x < this.w && y < this.h; }
 
-  walkableAnimal(i) { return this.ground[i] !== G.WATER && !BLOCK_ANIMAL.has(this.obj[i]); }
+  walkableAnimal(i) { return (this.ground[i] !== G.WATER || this.obj[i] === O.BRIDGE) && !BLOCK_ANIMAL.has(this.obj[i]); }
   walkablePlayer(x, y) {
     if (!this.inside(x, y)) return false;
     const i = this.idx(x, y);
-    return this.ground[i] !== G.WATER && !BLOCK_PLAYER.has(this.obj[i]);
+    return (this.ground[i] !== G.WATER || this.obj[i] === O.BRIDGE) && !BLOCK_PLAYER.has(this.obj[i]);
   }
   // Colisão fina do jogador: cada objeto bloqueia só a parte desenhada (pé/base),
   // em coordenadas locais do tile (0..1). Casas e água bloqueiam o tile todo.
   solidRects(x, y) {
     if (!this.inside(x, y)) return FULL;
     const i = this.idx(x, y);
-    if (this.ground[i] === G.WATER) return FULL;
     const o = this.obj[i];
+    if (o === O.BRIDGE) return null;
+    if (this.ground[i] === G.WATER) return FULL;
     if (o === O.FENCE) {
       const r = [[0.4, 0.6, 0.6, 0.86]]; // poste
       const fl = (nx, ny) => this.inside(nx, ny) && (this.obj[this.idx(nx, ny)] === O.FENCE || this.obj[this.idx(nx, ny)] === O.GATE);
@@ -75,6 +75,10 @@ export class World {
         if (x1 > tx + a && x0 < tx + b && y1 > ty + c && y0 < ty + d) return false;
     }
     return true;
+  }
+  inBush(px, py) {
+    const x = Math.floor(px), y = Math.floor(py);
+    return this.inside(x, y) && this.obj[this.idx(x, y)] === O.BUSH;
   }
   nearWater(x, y, r = 1) {
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {

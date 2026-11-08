@@ -24,22 +24,29 @@ function hasAnimalOn(g, x, y) { return g.animals.some(a => Math.floor(a.x) === x
 
 function addItem(g, id, n) { g.inv[id] = (g.inv[id] || 0) + n; }
 
-export function useTool(g, toolId, x, y, px = x + 0.5, py = y + 0.5) {
+export function useTool(g, toolId, x, y, px = x + 0.5, py = y + 0.5, opts = {}) {
+  const r = useToolRaw(g, toolId, x, y, px, py, opts);
+  // cerca/ponte/árvore mudaram: recalcula na hora as áreas fechadas para os animais
+  if (g.world.dirty) g.world.recomputeComponents();
+  return r;
+}
+
+function useToolRaw(g, toolId, x, y, px, py, opts) {
   const w = g.world;
   if (!w.inside(x, y)) return null;
   const mount = g.player.mount;
   if (mount?.kind === 'trator') {
-    if (['enxada', 'plantar', 'adubo'].includes(toolId)) return tractorWork(g, toolId, x, y);
+    if (['enxada', 'plantar', 'adubo'].includes(toolId)) return tractorWork(g, toolId, x, y, opts);
     if (toolId !== 'mao') return say('Do trator só dá para arar, plantar e adubar. Desça com X.', 'bad');
   }
   if (mount?.kind === 'cavalo' && ['enxada', 'plantar', 'construir', 'machado', 'adubo', 'regador'].includes(toolId)) return say('Desça do cavalo (X) para trabalhar a terra.', 'bad');
-  return useTool1(g, toolId, x, y, px, py);
+  return useTool1(g, toolId, x, y, px, py, opts);
 }
 
-function useTool1(g, toolId, x, y, px, py) {
+function useTool1(g, toolId, x, y, px, py, opts = {}) {
   switch (toolId) {
     case 'mao': return hand(g, x, y, px, py);
-    case 'enxada': return hoe(g, x, y);
+    case 'enxada': return hoe(g, x, y, opts.hoeMode);
     case 'machado': return axe(g, x, y);
     case 'regador': return water(g, x, y);
     case 'plantar': return plant(g, x, y);
@@ -126,12 +133,12 @@ export function harvestCrop(g, i) {
 }
 
 // Trator: trabalha um quadrado 3x3 e gasta diesel por tile.
-function tractorWork(g, toolId, x, y) {
+function tractorWork(g, toolId, x, y, opts = {}) {
   const w = g.world;
   let n = 0, last = null;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     if (!w.inside(x + dx, y + dy)) continue;
-    const r = useTool1(g, toolId, x + dx, y + dy, x + dx + 0.5, y + dy + 0.5);
+    const r = useTool1(g, toolId, x + dx, y + dy, x + dx + 0.5, y + dy + 0.5, { hoeMode: opts.hoeMode || 'till' });
     if (r && r.ok) n++;
     else if (r && r.kind === 'bad') last = r;
   }
@@ -174,7 +181,8 @@ export function dismount(g) {
   return say('Desceu.');
 }
 
-function hoe(g, x, y) {
+// mode: 'till' só ara, 'untill' só desfaz terra arada, vazio decide pelo tile
+function hoe(g, x, y, mode) {
   const w = g.world, i = w.idx(x, y), o = w.obj[i];
   const c = w.crops.get(i);
   if (c) {
@@ -188,6 +196,12 @@ function hoe(g, x, y) {
   }
   if (o !== O.NONE) return null;
   const gr = w.ground[i];
+  if (gr === G.TILLED) {
+    if (mode === 'till') return null;
+    w.ground[i] = G.DIRT; w.idle[i] = 0;
+    return say('Desfez a terra arada (volta a ser campo com o tempo, ou plante capim)');
+  }
+  if (mode === 'untill') return null;
   if (gr === G.GRASS || gr === G.DIRT || gr === G.PASTURE || gr === G.SAND || gr === G.YARD) {
     if (gr === G.SAND) return say('Areia não serve para plantar.', 'bad');
     w.ground[i] = G.TILLED; w.grass[i] = 0; w.idle[i] = 0;
@@ -204,7 +218,7 @@ function axe(g, x, y) {
     return say('+4 madeira', 'good');
   }
   if (o === O.BUSH) { w.obj[i] = O.NONE; w.dirty = true; addItem(g, 'madeira', 1); return say('+1 madeira', 'good'); }
-  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1] }[o];
+  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1], [O.BRIDGE]: ['madeira', 4] }[o];
   if (refund) {
     w.obj[i] = O.NONE; w.dirty = true;
     w.troughs.delete(i); w.feeders.delete(i); w.sprinklers.delete(i);
@@ -259,7 +273,8 @@ function build(g, x, y) {
   const b = BUILD_LIST[p.build];
   if (w.obj[i] !== O.NONE || w.crops.has(i)) return null;
   const gr = w.ground[i];
-  if (gr === G.WATER) return say('Não dá para construir na água.', 'bad');
+  if (b.water && gr !== G.WATER) return say('A ponte vai em cima da água.', 'bad');
+  if (!b.water && gr === G.WATER) return say('Não dá para construir na água (só ponte).', 'bad');
   if (Math.floor(p.x) === x && Math.floor(p.y) === y) return null;
   if (hasAnimalOn(g, x, y)) return say('Tem um animal aí.', 'bad');
   for (const k in b.cost) if ((g.inv[k] || 0) < b.cost[k]) return say(`Falta ${ITEMS[k].name.toLowerCase()} (${b.cost[k]}). ${k === 'madeira' ? 'Corte árvores ou compre.' : 'Compre na cooperativa.'}`, 'bad');

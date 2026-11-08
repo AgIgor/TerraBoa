@@ -14,7 +14,7 @@ const pct = v => Math.round(v * 100) + '%';
 const TOOL_ICON = { mao: '✋', enxada: '⛏️', machado: '🪓', regador: '🚿', plantar: '🌱', construir: '🔨', laco: '➰', adubo: '🧪' };
 const PLANT_ICON = { milho: '🌽', soja: '🫘', cana: '🎋', cafe: '☕', pimenta: '🌶️', capim: '🌾' };
 const GROUND_NAME = { [G.GRASS]: 'Campo nativo', [G.WATER]: 'Água', [G.SAND]: 'Areia', [G.DIRT]: 'Terra nua', [G.TILLED]: 'Terra arada', [G.PASTURE]: 'Pasto formado', [G.PATH]: 'Estrada', [G.YARD]: 'Terreiro' };
-const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
+const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.BRIDGE]: 'Ponte', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
 
 export class UI {
   constructor(game) {
@@ -449,6 +449,8 @@ export class UI {
         <li><b>Ovelha e cabra:</b> tosquie a lã e ordenhe a cabra com a mão.</li>
         <li><b>Armazém:</b> a casa guarda 40 sacas de grão. Paiol (+80) e silo (+400) evitam que a colheita estrague. Leite e cana estragam rápido.</li>
         <li><b>Trator e peões:</b> o trator (cooperativa) faz 3×3 de uma vez; peões (janela Fazenda) regam, colhem e tratam dos bichos.</li>
+        <li><b>Rio:</b> construa ponte (6 madeiras) em cima da água. Animais também passam.</li>
+        <li><b>Arou no lugar errado?</b> Clique com a enxada na terra arada para desfazer.</li>
         <li><b>Noite:</b> durma na casa (mão) depois das 19h. O jogo salva sozinho todo dia.</li>
       </ul></div></div>`;
   }

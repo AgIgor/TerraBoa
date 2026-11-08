@@ -1,5 +1,5 @@
 // Liga tudo: jogo, desenho, interface e controles.
-import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED } from './config.js';
+import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED, BUSH_SLOW, G } from './config.js';
 import { newGame, advance, serialize, deserialize, dayOf, hourOf, SAVE_KEY } from './game.js';
 import { updateAnimals } from './animals.js';
 import { useTool, animalAt, mountAt, dismount } from './actions.js';
@@ -162,14 +162,19 @@ function dragUse(first) {
   const key = t.x + ',' + t.y;
   if (!first && (mouse.lastTile === key || ['mao', 'laco', 'machado'].includes(tool))) return;
   if (!inReach(t, tool)) { if (first) ui.toast('Longe demais. Chegue mais perto.', 'bad'); return; }
+  // a enxada decide no primeiro tile do arraste: começou em terra arada = desfazer, senão = arar
+  if (first && tool === 'enxada') {
+    const w = g.world, i = w.idx(t.x, t.y);
+    mouse.hoeMode = w.inside(t.x, t.y) && w.ground[i] === G.TILLED && !w.crops.has(i) ? 'untill' : 'till';
+  }
   mouse.lastTile = key;
-  doUse(tool, t);
+  doUse(tool, t, tool === 'enxada' ? { hoeMode: mouse.hoeMode } : {});
 }
-function doUse(tool, t) {
+function doUse(tool, t, opts = {}) {
   const p = g.player;
   const dx = t.x + 0.5 - p.x, dy = t.y + 0.5 - p.y;
   if (Math.hypot(dx, dy) > 0.3) { const l = Math.hypot(dx, dy); p.fx = dx / l; p.fy = dy / l; }
-  const r = useTool(g, tool, t.x, t.y, t.px, t.py);
+  const r = useTool(g, tool, t.x, t.y, t.px, t.py, opts);
   if (!r) return;
   if (r.open === 'market') { ui.open('mercado', { atCoop: true, force: true }); return; }
   if (r.slept) save();
@@ -195,7 +200,8 @@ function movePlayer(dt) {
   if (l > 1) { mx /= l; my /= l; }
   p.fx = mx / Math.max(l, 1e-6); p.fy = my / Math.max(l, 1e-6);
   if (l <= 1) { const k = Math.hypot(p.fx, p.fy); p.fx /= k; p.fy /= k; }
-  const speed = p.mount ? SPEED[p.mount.kind] : p.sneak ? SPEED.sneak : SPEED.walk;
+  let speed = p.mount ? SPEED[p.mount.kind] : p.sneak ? SPEED.sneak : SPEED.walk;
+  if (w.inBush(p.x, p.y)) speed *= p.mount?.kind === 'cavalo' ? 0.6 : BUSH_SLOW;
   if (p.mount) p.sneak = false;
   const sx = mx * speed * dt, sy = my * speed * dt;
   // pés do jogador: caixa pequena; montado, a caixa é mais larga

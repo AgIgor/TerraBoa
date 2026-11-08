@@ -72,6 +72,7 @@ export class Renderer {
       }
       if (gr === G.TILLED && w.moist[i] > 0.15) { ctx.globalAlpha = Math.min(1, (w.moist[i] - 0.15) * 1.6); ctx.drawImage(wetTilled(), px, py); ctx.globalAlpha = 1; }
       if (gr === G.WATER) shore(ctx, w, x, y, px, py);
+      if (w.obj[i] === O.BRIDGE) drawBridge(ctx, w, x, y, px, py);
     }
     // geada pela manhã
     if (today.frost && hour < 9.5) {
@@ -86,7 +87,7 @@ export class Renderer {
       const i = w.idx(x, y), o = w.obj[i];
       const c = w.crops.get(i);
       if (c) list.push([y + 0.6, 0, i, c]);
-      if (o !== O.NONE && o !== O.HOUSE && o !== O.COOP) list.push([y + (o === O.TREE ? 0.85 : 0.7), 1, i, o]);
+      if (o !== O.NONE && o !== O.HOUSE && o !== O.COOP && o !== O.BRIDGE) list.push([y + (o === O.TREE ? 0.85 : 0.7), 1, i, o]);
     }
     for (const b of w.buildings) list.push([b.y + b.h, 2, b]);
     for (const e of w.drops) if (e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1) list.push([e.y + 0.3, 3, e]);
@@ -294,6 +295,23 @@ export class Renderer {
 }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// Ponte: tábuas atravessadas no sentido da travessia e corrimão nas laterais.
+function drawBridge(ctx, w, x, y, px, py) {
+  const solid = (nx, ny) => w.inside(nx, ny) && (w.ground[w.idx(nx, ny)] !== G.WATER || w.obj[w.idx(nx, ny)] === O.BRIDGE);
+  const horiz = solid(x - 1, y) || solid(x + 1, y);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(px, py + 3, T, T);
+  ctx.fillStyle = '#9a6a3a'; ctx.fillRect(px, py, T, T);
+  ctx.fillStyle = '#7a4e28';
+  if (horiz) {
+    for (let k = 0; k < T; k += 6) ctx.fillRect(px + k, py, 1, T);
+    ctx.fillStyle = '#5e3a1c'; ctx.fillRect(px, py + 1, T, 3); ctx.fillRect(px, py + T - 4, T, 3);
+    ctx.fillStyle = '#4a2c14'; ctx.fillRect(px + 2, py - 3, 3, 6); ctx.fillRect(px + T - 5, py - 3, 3, 6);
+  } else {
+    for (let k = 0; k < T; k += 6) ctx.fillRect(px, py + k, T, 1);
+    ctx.fillStyle = '#5e3a1c'; ctx.fillRect(px + 1, py, 3, T); ctx.fillRect(px + T - 4, py, 3, T);
+  }
+}
 
 function shore(ctx, w, x, y, px, py) {
   ctx.fillStyle = 'rgba(220,235,245,0.5)';

@@ -1,5 +1,5 @@
 // Simulação da terra: umidade, lavouras, capim, regeneração natural. Sem DOM.
-import { G, O, CROPS, ITEMS, GRASS_CAP, GRASS_RATE, TROUGH_MAX, YEAR_DAYS, GRAINS, STORE_BASE, STORE_ADD, SPOIL, SPRINKLER } from './config.js';
+import { G, O, CROPS, ITEMS, GRASS_CAP, GRASS_RATE, TROUGH_MAX, YEAR_DAYS, GRAINS, STORE_BASE, STORE_ADD, SPOIL, SPRINKLER, PRODUCTS, PROD_BASE, PROD_ADD, STORED_SPOIL } from './config.js';
 import { workersDay } from './workers.js';
 import { fireDay, fireHour } from './fire.js';
 import { tempAt, rainAt, climateNextDay, EVENT_TEXT, ENSO } from './climate.js';
@@ -159,14 +159,20 @@ export function daily(g, newDay) {
 
   // perecíveis
   const lostTxt = [];
+  // o que cabe no armazém (casa + armazéns) estraga bem menos
+  const pcap = productCap(w), pst = productStock(g);
+  const inside = pst > 0 ? Math.min(1, pcap / pst) : 1;
+  const hasStore = pcap > PROD_BASE;
   for (const id in SPOIL) {
     const have = g.inv[id] || 0;
     if (have <= 0) continue;
-    const lost = Math.min(have, Math.ceil(have * SPOIL[id]));
+    const rate = SPOIL[id] * (inside * (hasStore ? STORED_SPOIL : 0.6) + (1 - inside));
+    const x = have * rate, lost = Math.min(have, Math.floor(x) + (g.rng.chance(x - Math.floor(x)) ? 1 : 0));
+    if (lost <= 0) continue;
     g.inv[id] -= lost;
-    if (id !== 'ovos') lostTxt.push(`${lost} ${ITEMS[id].unit} de ${ITEMS[id].name.toLowerCase()}`);
+    if (!id.startsWith('ovos')) lostTxt.push(`${lost} ${ITEMS[id].unit} de ${ITEMS[id].name.toLowerCase()}`);
   }
-  if (lostTxt.length) g.notify(`Estragou: ${lostTxt.join(', ')}. Leite e cana precisam ser vendidos logo.`, 'bad');
+  if (lostTxt.length) g.notify(`Estragou: ${lostTxt.join(', ')}. ${hasStore ? 'O armazém está cheio.' : 'Construa um armazém para conservar a produção.'}`, 'bad');
   // grão fora do armazém pega umidade e caruncho
   const cap = storageCap(w), stored = grainStock(g);
   if (stored > cap) {
@@ -229,4 +235,10 @@ export function storageCap(w) {
   for (let i = 0; i < w.obj.length; i++) { const add = STORE_ADD[w.obj[i]]; if (add) cap += add; }
   return cap;
 }
+export function productCap(w) {
+  let cap = PROD_BASE;
+  for (let i = 0; i < w.obj.length; i++) { const add = PROD_ADD[w.obj[i]]; if (add) cap += add; }
+  return cap;
+}
+export function productStock(g) { return PRODUCTS.reduce((s, id) => s + (g.inv[id] || 0), 0); }
 export function grainStock(g) { return GRAINS.reduce((s, id) => s + (g.inv[id] || 0), 0); }

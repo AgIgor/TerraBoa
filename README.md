@@ -18,6 +18,7 @@ Os módulos ES não funcionam abrindo o `index.html` direto do disco.
 - Fogo no campo na seca longa, que o vento leva e o aceiro segura; granizo nas tempestades de primavera/verão; lampiões para iluminar a noite.
 - 11 espécies: gado, porco, galinha, cavalo, ovelha, cabra, pato, peru, coelho, lhama e búfalo (ovos de pata, fibra de lhama, leite de búfala).
 - Manadas selvagens que andam juntas, têm cria e chegam pelas bordas do mapa; cria por estação, descanso pós-parto, ovos férteis que chocam e filhotes que seguem a mãe.
+- Peões com tarefa principal e reservas (não ficam parados); quem trata dos bichos recolhe ovos, ordenha e tosquia; cada peão guarda ou vende direto (5% de frete). Armazém (35 madeiras) guarda 150 produtos e conserva.
 - Sons gerados na hora (Web Audio, sem arquivos): ferramentas, bichos, passos, chuva, vento, trovão, trator, pássaros, grilos, sapos, cigarras e galo. Botão 🔊 no topo e volume no Menu.
 - Jogar junto (até 4, PeerJS): o anfitrião simula e salva; convidados mandam ações e veem o mundo sincronizado. Convidado nunca salva por cima das próprias fazendas.
 - Poço: leva água para aspersores (até 12 tiles) e enche o regador longe do rio.
@@ -39,4 +40,4 @@ WASD/setas andam, Shift anda devagar, 1–8 ferramentas, Q/R trocam semente ou c
 - `src/actions.js` ferramentas; `src/game.js` estado, tempo e save
 - `src/art.js` + `src/render.js` desenho; `src/ui.js` interface; `src/main.js` controles
 
-A lógica não usa o navegador: `node test/sim.test.mjs`, `test/saves.test.mjs` `test/fire.test.mjs` , `test/poco.test.mjs` , `test/cria.test.mjs` e `test/net.test.mjs` simula anos de clima, mercado, uma lavoura e um pasto com vacas.
+A lógica não usa o navegador: `node test/sim.test.mjs`, `test/saves.test.mjs` `test/fire.test.mjs` , `test/poco.test.mjs` , `test/cria.test.mjs` , `test/net.test.mjs` e `test/peoes.test.mjs` simula anos de clima, mercado, uma lavoura e um pasto com vacas.

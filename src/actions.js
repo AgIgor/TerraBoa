@@ -244,7 +244,7 @@ function axe(g, x, y) {
     return say('+4 madeira', 'good');
   }
   if (o === O.BUSH) { w.obj[i] = O.NONE; w.dirty = true; addItem(g, 'madeira', 1); return say('+1 madeira', 'good'); }
-  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1], [O.BRIDGE]: ['madeira', 4], [O.LAMP]: ['madeira', 2], [O.WELL]: ['madeira', 3] }[o];
+  const refund = { [O.FENCE]: ['madeira', 1], [O.GATE]: ['madeira', 3], [O.FEEDER]: ['madeira', 3], [O.TROUGH]: ['bebedouro', 1], [O.SPRINKLER]: ['aspersor', 1], [O.PAIOL]: ['madeira', 15], [O.SILO]: ['silo', 1], [O.BRIDGE]: ['madeira', 4], [O.LAMP]: ['madeira', 2], [O.WELL]: ['madeira', 3], [O.ARMAZEM]: ['madeira', 20] }[o];
   if (refund) {
     w.obj[i] = O.NONE; w.dirty = true;
     w.troughs.delete(i); w.feeders.delete(i); w.sprinklers.delete(i);

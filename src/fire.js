@@ -4,8 +4,8 @@ import { G, O, CROPS } from './config.js';
 import { rainAt } from './climate.js';
 
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-const BURNABLE_OBJ = { [O.BUSH]: 0.9, [O.TREE]: 0.45, [O.FENCE]: 0.35, [O.GATE]: 0.35, [O.FEEDER]: 0.35, [O.PAIOL]: 0.4, [O.LAMP]: 0.2 };
-const BURN_HOURS = { [O.TREE]: 4, [O.PAIOL]: 3 };
+const BURNABLE_OBJ = { [O.BUSH]: 0.9, [O.TREE]: 0.45, [O.FENCE]: 0.35, [O.GATE]: 0.35, [O.FEEDER]: 0.35, [O.PAIOL]: 0.4, [O.LAMP]: 0.2, [O.ARMAZEM]: 0.35 };
+const BURN_HOURS = { [O.TREE]: 4, [O.PAIOL]: 3, [O.ARMAZEM]: 4 };
 export const MAX_FIRES = 500;
 
 // Quão fácil o tile pega fogo (0 = não queima: água, estrada, terra nua ou arada sem lavoura)
@@ -67,7 +67,7 @@ export function fireHour(g, hour) {
     const c = w.crops.get(i);
     if (c && !c.dead) { c.dead = true; c.health = 0; g.stats.lost++; hitFarm = true; }
     if (f.age >= (BURN_HOURS[o] || 1) && BURNABLE_OBJ[o]) {
-      if (o === O.FENCE || o === O.GATE || o === O.FEEDER || o === O.PAIOL || o === O.LAMP) hitFarm = true;
+      if (o === O.FENCE || o === O.GATE || o === O.FEEDER || o === O.PAIOL || o === O.LAMP || o === O.ARMAZEM) hitFarm = true;
       w.obj[i] = O.NONE; w.feeders.delete(i); w.dirty = true;
     }
     w.fert[i] = Math.min(1, w.fert[i] + 0.02); // cinza aduba

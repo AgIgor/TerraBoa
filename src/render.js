@@ -230,6 +230,17 @@ export class Renderer {
         if (lit) { ctx.fillStyle = 'rgba(255,200,110,0.25)'; ctx.beginPath(); ctx.arc(px + 16.5, py - 10, 9, 0, Math.PI * 2); ctx.fill(); }
         break;
       }
+      case O.ARMAZEM: {
+        ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(px - 2, py + 26, 38, 6);
+        ctx.fillStyle = '#e8e0cc'; ctx.fillRect(px - 2, py - 6, 36, 34);
+        ctx.fillStyle = '#c8bca4'; ctx.fillRect(px - 2, py + 24, 36, 4);
+        ctx.fillStyle = '#2e6a4a'; ctx.fillRect(px + 8, py + 6, 16, 22);
+        ctx.strokeStyle = '#e8e0cc'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(px + 8, py + 6); ctx.lineTo(px + 24, py + 28); ctx.moveTo(px + 24, py + 6); ctx.lineTo(px + 8, py + 28); ctx.stroke();
+        ctx.fillStyle = '#7a8088'; ctx.beginPath(); ctx.moveTo(px - 5, py - 4); ctx.lineTo(px + 16, py - 20); ctx.lineTo(px + 37, py - 4); ctx.fill();
+        ctx.fillStyle = '#5a6068'; ctx.fillRect(px - 5, py - 5, 42, 2);
+        ctx.fillStyle = '#a8763e'; ctx.fillRect(px + 12, py - 3, 8, 6); ctx.fillStyle = '#e8c040'; ctx.fillRect(px + 14, py - 1, 4, 2);
+        break;
+      }
       case O.PAIOL: {
         ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(px + 2, py + 26, 32, 6);
         ctx.fillStyle = '#6b4526'; ctx.fillRect(px + 3, py + 18, 3, 10); ctx.fillRect(px + 26, py + 18, 3, 10);

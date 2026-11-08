@@ -18,7 +18,7 @@ import { worldToJSON, worldFromJSON, tileState, setTileState } from './world.js'
 import { useTool, toggleMount, pickEggsAt } from './actions.js';
 import { COMMANDS, runCommand } from './commands.js';
 
-export const NET_VERSION = 1; // aumente quando o protocolo ou a simulação mudarem
+export const NET_VERSION = 2; // aumente quando o protocolo ou a simulação mudarem
 const PREFIX = 'terraboa-v1-';
 const MAX_PLAYERS = 4;
 const COLORS = ['#e8c040', '#4a9ae8', '#e8604a', '#a86ae8', '#4ac8a0', '#e88ac0'];
@@ -211,7 +211,7 @@ export class Net {
       case 'cmd': {
         if (!COMMANDS.has(m.act)) break;
         const ds = {};
-        for (const k of ['id', 'n', 'i', 'task']) if (m.ds && m.ds[k] != null) ds[k] = String(m.ds[k]).slice(0, 30);
+        for (const k of ['id', 'n', 'i', 'task', 'dest']) if (m.ds && m.ds[k] != null) ds[k] = String(m.ds[k]).slice(0, 30);
         const r = this.runAs(p, () => runCommand(g, m.act, ds, p));
         e.conn.send({ t: 'cres', r, inv: g.inv, money: g.money });
         this.t.full = 99; // animal comprado/vendido aparece logo para todos

@@ -16,12 +16,12 @@ export const G = { GRASS: 0, WATER: 1, SAND: 2, DIRT: 3, TILLED: 4, PASTURE: 5, 
 // Objetos sobre o chão
 export const O = {
   NONE: 0, TREE: 1, BUSH: 2, ROCK: 3, FENCE: 4, GATE: 5, TROUGH: 6, FEEDER: 7,
-  SPRINKLER: 8, HOUSE: 9, COOP: 10, PAIOL: 11, SILO: 12, BRIDGE: 13, LAMP: 14, WELL: 15,
+  SPRINKLER: 8, HOUSE: 9, COOP: 10, PAIOL: 11, SILO: 12, BRIDGE: 13, LAMP: 14, WELL: 15, ARMAZEM: 16,
 };
 
 // O que bloqueia o jogador e os animais
-export const BLOCK_PLAYER = new Set([O.TREE, O.ROCK, O.FENCE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO, O.LAMP, O.WELL]);
-export const BLOCK_ANIMAL = new Set([O.TREE, O.BUSH, O.ROCK, O.FENCE, O.GATE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO, O.LAMP, O.WELL]);
+export const BLOCK_PLAYER = new Set([O.TREE, O.ROCK, O.FENCE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO, O.LAMP, O.WELL, O.ARMAZEM]);
+export const BLOCK_ANIMAL = new Set([O.TREE, O.BUSH, O.ROCK, O.FENCE, O.GATE, O.TROUGH, O.FEEDER, O.SPRINKLER, O.HOUSE, O.COOP, O.PAIOL, O.SILO, O.LAMP, O.WELL, O.ARMAZEM]);
 
 // Estações (hemisfério sul, clima de cerrado / sul de Minas). Começa na primavera (setembro).
 export const SEASONS = [
@@ -196,6 +196,7 @@ export const BUILD_LIST = [
   { id: 'bebedouro', name: 'Bebedouro', obj: O.TROUGH, cost: { bebedouro: 1 } },
   { id: 'aspersor', name: 'Aspersor', obj: O.SPRINKLER, cost: { aspersor: 1 } },
   { id: 'paiol', name: 'Paiol', obj: O.PAIOL, cost: { madeira: 25 } },
+  { id: 'armazem', name: 'Armazém', obj: O.ARMAZEM, cost: { madeira: 35 } },
   { id: 'ponte', name: 'Ponte', obj: O.BRIDGE, cost: { madeira: 6 }, water: true },
   { id: 'lampiao', name: 'Lampião', obj: O.LAMP, cost: { madeira: 3 } },
   { id: 'silo', name: 'Silo', obj: O.SILO, cost: { silo: 1 } },
@@ -216,6 +217,13 @@ export const GRAINS = ['milho', 'soja', 'cafe'];
 export const STORE_BASE = 40;
 export const STORE_ADD = { [O.PAIOL]: 80, [O.SILO]: 400 };
 // Perecíveis: fração perdida por dia
+// Produtos (não grãos): a casa guarda um pouco; cada armazém guarda mais e conserva (resfriado/seco).
+export const PRODUCTS = ['leite', 'leite_cabra', 'leite_bufala', 'ovos', 'ovos_pato', 'la', 'fibra_lhama', 'cana', 'pimenta'];
+export const PROD_BASE = 20;
+export const PROD_ADD = { [O.ARMAZEM]: 150 };
+export const STORED_SPOIL = 0.15; // no armazém estraga 15% do normal
+export const WORK_HOURS = [6, 18];
+export const SALE_FEE = 0.05; // frete quando o peão vende direto
 export const SPOIL = { leite: 0.5, leite_cabra: 0.5, leite_bufala: 0.5, ovos: 0.12, ovos_pato: 0.12, cana: 0.25 };
 
 // Montarias e máquinas
@@ -225,7 +233,7 @@ export const DIESEL_PER_TILE = 0.18;
 export const WAGE = 28;       // diária do peão
 export const MAX_WORKERS = 3;
 export const WORK_TASKS = {
-  regar: { name: 'Regar lavouras', hint: 'Molha as lavouras com a terra seca. Enche o regador na água.' },
-  colher: { name: 'Colher', hint: 'Colhe o que estiver maduro e guarda no estoque.' },
-  tratar: { name: 'Tratar dos bichos', hint: 'Enche cochos (com ração ou milho do estoque) e bebedouros.' },
+  regar: { name: 'Regar lavouras', hint: 'Molha as lavouras secas. Sem isso, enche bebedouros e colhe.' },
+  colher: { name: 'Colher', hint: 'Colhe o que estiver maduro. Sem isso, limpa lavoura morta, rega e recolhe ovos.' },
+  tratar: { name: 'Tratar dos bichos', hint: 'Enche cochos e bebedouros, recolhe ovos, ordenha e tosquia.' },
 };

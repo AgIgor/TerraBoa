@@ -40,7 +40,7 @@ export function offerPrice(g, o) {
   return p * 1.15;
 }
 
-export const COMMANDS = new Set(['sell', 'buyi', 'sella', 'buya', 'buyt', 'hire', 'task', 'fire']);
+export const COMMANDS = new Set(['sell', 'buyi', 'sella', 'buya', 'buyt', 'hire', 'task', 'fire', 'wdest']);
 
 const res = (msg, kind = 'info', extra = {}) => ({ msg, kind, ...extra });
 
@@ -102,6 +102,11 @@ export function runCommand(g, act, ds, p = g.player) {
       const k = g.workers.find(k => k.id === +ds.id);
       if (k) { k.task = ds.task; k.path = []; k.job = null; k.timer = 0; }
       return null;
+    }
+    case 'wdest': {
+      const k = g.workers.find(k => k.id === +ds.id);
+      if (k) k.dest = ds.dest === 'vender' ? 'vender' : 'guardar';
+      return k ? res(k.dest === 'vender' ? `${k.name} vai vender direto o que produzir (5% de frete).` : `${k.name} vai guardar a produção no estoque.`) : null;
     }
     case 'fire': {
       const k = g.workers.find(k => k.id === +ds.id);

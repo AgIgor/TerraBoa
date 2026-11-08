@@ -4,7 +4,7 @@ import { COMMODITIES, SELLABLE, INPUTS, price, inputPrice, sell, trend } from '.
 import { dateText, clockText, hourOf, dayOf } from './game.js';
 import { tempAt, weatherLabel, weatherIcon, ENSO, seasonParams, EVENT_TEXT, windLabel } from './climate.js';
 import { animalLabel, animalValue, animalMarketQty, isAdult, makeAnimal, breedText } from './animals.js';
-import { fTemp, cropStage, storageCap, grainStock } from './sim.js';
+import { fTemp, cropStage, storageCap, grainStock, productCap, productStock } from './sim.js';
 import { hireWorker, fireWorker } from './workers.js';
 import * as Saves from './saves.js';
 import { generateWorld } from './world.js';
@@ -22,7 +22,7 @@ const pct = v => Math.round(v * 100) + '%';
 const TOOL_ICON = { mao: '✋', enxada: '⛏️', machado: '🪓', regador: '🚿', plantar: '🌱', construir: '🔨', laco: '➰', adubo: '🧪' };
 const PLANT_ICON = { milho: '🌽', soja: '🫘', cana: '🎋', cafe: '☕', pimenta: '🌶️', capim: '🌾' };
 const GROUND_NAME = { [G.GRASS]: 'Campo nativo', [G.WATER]: 'Água', [G.SAND]: 'Areia', [G.DIRT]: 'Terra nua', [G.TILLED]: 'Terra arada', [G.PASTURE]: 'Pasto formado', [G.PATH]: 'Estrada', [G.YARD]: 'Terreiro' };
-const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.BRIDGE]: 'Ponte', [O.LAMP]: 'Lampião', [O.WELL]: 'Poço', [O.PAIOL]: 'Paiol (+80 sacas)', [O.SILO]: 'Silo (+400 sacas)' };
+const OBJ_NAME = { [O.TREE]: 'Árvore', [O.BUSH]: 'Arbusto', [O.ROCK]: 'Pedra', [O.FENCE]: 'Cerca', [O.GATE]: 'Porteira', [O.TROUGH]: 'Bebedouro', [O.FEEDER]: 'Cocho', [O.SPRINKLER]: 'Aspersor', [O.HOUSE]: 'Casa', [O.COOP]: 'Cooperativa', [O.BRIDGE]: 'Ponte', [O.LAMP]: 'Lampião', [O.WELL]: 'Poço', [O.PAIOL]: 'Paiol (+80 sacas)', [O.ARMAZEM]: 'Armazém (+150 produtos, conserva)', [O.SILO]: 'Silo (+400 sacas)' };
 
 export class UI {
   constructor(game) {
@@ -159,7 +159,8 @@ export class UI {
       html += `<h4>${title}</h4>` + (rows.length ? rows.join('') : '<div class="empty">nada</div>');
     }
     const cap = storageCap(g.world), st = grainStock(g);
-    html += `<h4>Armazém de grãos</h4><div><span>Sacas</span><b class="${st > cap ? 'down' : ''}">${st} / ${cap}</b></div>`;
+    const pc = productCap(g.world), ps = productStock(g);
+    html += `<h4>Armazenagem</h4><div><span>Grãos (sacas)</span><b class="${st > cap ? 'down' : ''}">${st} / ${cap}</b></div><div><span>Produtos</span><b class="${ps > pc ? 'down' : ''}">${ps} / ${pc}</b></div>`;
     if (g.workers.length) html += '<h4>Peões</h4>' + g.workers.map(k => `<div><span>${k.name}</span><b>${k.status || ''}</b></div>`).join('');
     const own = g.animals.filter(a => a.owned);
     if (own.length) {
@@ -573,10 +574,12 @@ export class UI {
     this.live = true;
     const rows = g.workers.map(k => `<tr><td><b>${k.name}</b><br><span class="unit">${k.status || ''}</span></td>
       <td><div class="btns" style="justify-content:flex-start">${Object.entries(WORK_TASKS).map(([id, t]) => `<button data-act="task" data-id="${k.id}" data-task="${id}" title="${t.hint}" ${k.task === id ? 'style="background:rgba(226,184,74,.35);border-color:#e2b84a"' : ''}>${t.name}</button>`).join('')}</div></td>
+      <td><div class="btns"><button data-act="wdest" data-id="${k.id}" data-dest="${k.dest === 'vender' ? 'guardar' : 'vender'}" title="O que ele colhe, ordenha, tosquia e recolhe">${k.dest === 'vender' ? '💰 Vende direto' : '📦 Guarda'}</button></div></td>
       <td><div class="btns"><button data-act="fire" data-id="${k.id}">Dispensar</button></div></td></tr>`).join('');
     const can = g.workers.length < MAX_WORKERS;
-    return `<p class="note">Cada peão ganha R$ ${WAGE} por dia, pago à meia-noite (sem dinheiro, ele vai embora). Trabalha das 6h às 17h. ${Object.values(WORK_TASKS).map(t => `<b>${t.name}:</b> ${t.hint}`).join(' ')}</p>
-      ${rows ? `<table class="mk"><tr><th>Peão</th><th>Tarefa</th><th></th></tr>${rows}</table>` : ''}
+    return `<p class="note">Cada peão ganha R$ ${WAGE} por dia, pago à meia-noite (sem dinheiro, ele vai embora). Trabalha das 6h às 18h e, sem serviço da tarefa dele, ajuda no que tiver. ${Object.values(WORK_TASKS).map(t => `<b>${t.name}:</b> ${t.hint}`).join(' ')}</p>
+      <p class="note"><b>Produção:</b> 📦 guarda no estoque (o armazém conserva) ou 💰 vende direto na cooperativa pelo preço do dia, com 5% de frete. Clique para trocar.</p>
+      ${rows ? `<table class="mk"><tr><th>Peão</th><th>Tarefa</th><th>Produção</th><th></th></tr>${rows}</table>` : ''}
       <p style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(WORK_TASKS).map(([id, t]) => `<button class="btn" data-act="hire" data-task="${id}" ${can ? '' : 'disabled'}>Contratar para ${t.name.toLowerCase()}</button>`).join('')}</p>
       ${can ? '' : `<p class="note">Máximo de ${MAX_WORKERS} peões.</p>`}`;
   }
@@ -613,6 +616,8 @@ export class UI {
         <li><b>Cria:</b> fêmea adulta, bem tratada e no mesmo pasto que um macho emprenha. Cada espécie tem sua época (vaca e égua na primavera, ovelha e cabra no outono) e descansa depois do parto. O painel Fazenda → Animais mostra a situação de cada uma.</li>
         <li><b>Pintinhos:</b> com galo no cercado, ovos deixados no chão 3 dias podem chocar. Recolha os ovos se quiser vender.</li>
         <li><b>Bichos soltos:</b> andam em manadas e têm cria. Manadas novas chegam pelas bordas do mapa, mais na primavera. Laçou uma mãe? O filhote vem atrás e fica no seu pasto.</li>
+        <li><b>Armazém:</b> 35 madeiras. Guarda 150 produtos (leite, ovos, lã, fibra, cana, pimenta), que estragam bem mais devagar. Assim dá para esperar o preço subir.</li>
+        <li><b>Peões:</b> na janela Fazenda → Peões escolha a tarefa e se ele guarda ou vende direto o que produz.</li>
         <li><b>Longe do rio?</b> Compre um poço na cooperativa e construa: aspersores a até 12 tiles dele funcionam, e o regador enche nele.</li>
         <li><b>Jogar junto:</b> Menu → Jogar junto → Criar sala e passe o código. Quem entra usa a tela inicial → Jogar junto. Até 4 pessoas; a fazenda, o dinheiro e o estoque são do anfitrião, e só ele salva.</li>
         <li><b>Arou no lugar errado?</b> Clique com a enxada na terra arada para desfazer.</li>
@@ -716,7 +721,7 @@ const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 
 // Desenha o mapa inteiro em miniatura (um pixel por tile).
 const MAP_COL = { [G.WATER]: [59, 125, 179], [G.SAND]: [217, 199, 143], [G.DIRT]: [141, 107, 71], [G.TILLED]: [110, 76, 46], [G.PATH]: [176, 145, 94], [G.YARD]: [184, 154, 106] };
-const OBJ_COL = { [O.TREE]: [38, 96, 36], [O.BUSH]: [70, 128, 52], [O.ROCK]: [130, 132, 128], [O.FENCE]: [107, 69, 38], [O.GATE]: [150, 110, 70], [O.HOUSE]: [190, 70, 50], [O.COOP]: [60, 120, 70], [O.BRIDGE]: [154, 106, 58], [O.PAIOL]: [168, 118, 62], [O.SILO]: [200, 204, 208] };
+const OBJ_COL = { [O.TREE]: [38, 96, 36], [O.BUSH]: [70, 128, 52], [O.ROCK]: [130, 132, 128], [O.FENCE]: [107, 69, 38], [O.GATE]: [150, 110, 70], [O.HOUSE]: [190, 70, 50], [O.COOP]: [60, 120, 70], [O.BRIDGE]: [154, 106, 58], [O.PAIOL]: [168, 118, 62], [O.ARMAZEM]: [220, 214, 196], [O.SILO]: [200, 204, 208] };
 function drawMap(cv, w) {
   const tmp = document.createElement('canvas'); tmp.width = w.w; tmp.height = w.h;
   const tc = tmp.getContext('2d'), img = tc.createImageData(w.w, w.h);

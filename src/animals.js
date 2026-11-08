@@ -2,7 +2,7 @@
 import { ANIMALS, FEED_VALUE, G, O, TROUGH_MAX, HUNGER_HOURS } from './config.js';
 import { tempAt, seasonIndex } from './climate.js';
 
-const WILD_CAP = 8, WILD_TOTAL = 42; // limite de bichos soltos por espécie e no total
+const WILD_CAP = 8, WILD_TOTAL = 64; // limite de bichos soltos por espécie e no total
 const EGG_HATCH_DAYS = 3, EGG_HATCH_P = 0.15, CHICKEN_CAP = 40;
 
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -32,13 +32,14 @@ export const isAdult = a => a.weight >= ANIMALS[a.sp].adultW * 0.85;
 // Rebanhos selvagens espalhados pelo mapa, longe da sede.
 export function spawnWild(g, count = null) {
   const w = g.world, r = g.rng;
-  const groups = count || [['gado', 3, 4], ['gado', 2, 3], ['gado', 3, 4], ['porco', 2, 4], ['porco', 2, 3], ['galinha', 3, 5], ['galinha', 2, 4], ['galinha', 2, 3], ['cavalo', 2, 3], ['cavalo', 2, 3], ['ovelha', 3, 5], ['cabra', 2, 4]];
+  const groups = count || [['gado', 3, 4], ['gado', 2, 3], ['gado', 3, 4], ['porco', 2, 4], ['porco', 2, 3], ['galinha', 3, 5], ['galinha', 2, 4], ['galinha', 2, 3], ['cavalo', 2, 3], ['cavalo', 2, 3], ['ovelha', 3, 5], ['cabra', 2, 4], ['pato', 3, 5], ['pato', 2, 4], ['peru', 2, 4], ['coelho', 3, 5], ['lhama', 2, 3], ['bufalo', 2, 3]];
   for (const [sp, a, b] of groups) {
     for (let tries = 0; tries < 300; tries++) {
       const x = r.int(3, w.w - 4), y = r.int(3, w.h - 4);
       const i = w.idx(x, y);
       if (!w.walkableAnimal(i) || !w.compOpen.has(w.comp[i])) continue;
       if (Math.hypot(x - w.farm.cx, y - w.farm.cy) < 16) continue;
+      if (ANIMALS[sp].aquatic && tries < 250 && !w.nearWater(x, y, 4)) continue; // pato e búfalo perto d'água
       makeHerd(g, sp, x, y, r.int(a, b));
       break;
     }
@@ -102,7 +103,7 @@ export function breedChance(g, a) {
   if (!isAdult(a)) return { p: 0, why: 'nova' };
   if (a.preg > 0) return { p: 0, why: 'prenhe' };
   if ((a.rest || 0) > 0) return { p: 0, why: 'descanso' };
-  if (a.owned && a.sp === 'galinha') return { p: 0, why: 'ovos' };
+  if (a.owned && d.eggs) return { p: 0, why: 'ovos' };
   const males = malesFor(g, a);
   if (!males.length) return { p: 0, why: 'sem macho' };
   const fed = a.lastFed ?? 0.8;
@@ -128,7 +129,7 @@ export function breedText(g, a) {
   }
   if (a.preg > 0) return `prenhe · nasce em ${a.preg} d`;
   const { p, why } = breedChance(g, a);
-  if (why === 'ovos') return malesFor(g, a).length ? 'ovos férteis: deixe no chão 3 dias para chocar' : 'sem galo: ovos não chocam';
+  if (why === 'ovos') return malesFor(g, a).length ? 'ovos férteis: deixe no chão 3 dias para chocar' : `sem ${d.male.toLowerCase()}: ovos não chocam`;
   if (why === 'descanso') return `descansando do parto (${a.rest} d)`;
   if (why === 'sem macho') return `sem ${d.male.toLowerCase()} no pasto`;
   if (why === 'fraca') return 'fraca demais para emprenhar';
@@ -290,6 +291,11 @@ function decide(g, a) {
       if (path.length) { a.path = path; a.timer = r.range(0.5, 1.5); return; }
     }
   }
+  // pato e búfalo gostam de ficar na beira d'água
+  if (ANIMALS[a.sp].aquatic && r.chance(0.2) && !w.nearWater(x, y, 1)) {
+    const path = bfs(w, x, y, 8, (i, nx, ny) => w.nearWater(nx, ny, 1));
+    if (path) { a.path = path; return; }
+  }
   // passeio: anda um pouco ou fica parado pastando
   if (r.chance(0.45)) {
     const n = r.int(1, 3);
@@ -422,13 +428,13 @@ export function animalsDay(g, today) {
 
     if (isAdult(a) && a.sex === 'f') {
       if (d.milk) a.milk = Math.min(d.milk * 2.2, a.milk + d.milk * comfort * Math.min(1, fed * 1.3));
-      if (a.sp === 'galinha' && fed > 0.4 && w.inside(x, y)) {
-        const n = Math.round(r.range(2, 5) * comfort * Math.min(1, fed * 1.2));
+      if (d.eggs && fed > 0.4 && w.inside(x, y)) {
+        const n = Math.round(r.range(d.eggs[0], d.eggs[1]) * comfort * Math.min(1, fed * 1.2));
         if (n > 0) {
           // ovos da mesma galinha no mesmo lugar se juntam num ninho
-          const nest = w.drops.find(e => e.x === x && e.y === y && e.day === today.day);
+          const nest = w.drops.find(e => e.x === x && e.y === y && e.day === today.day && (e.sp || 'galinha') === a.sp);
           const fertile = malesFor(g, a).length > 0;
-          if (nest) { nest.n += n; nest.f = nest.f || fertile; } else w.drops.push({ x, y, n, day: today.day, f: fertile });
+          if (nest) { nest.n += n; nest.f = nest.f || fertile; } else w.drops.push({ x, y, n, day: today.day, f: fertile, sp: a.sp });
         }
       }
     }
@@ -467,21 +473,22 @@ export function animalsDay(g, today) {
   }
 
   // ovos férteis esquecidos 3 dias podem chocar; o resto estraga
-  let chicks = g.animals.filter(a => a.owned && a.sp === 'galinha').length;
-  const keep = [];
-  // no máximo uma ninhada choca por dia (uma galinha choca de cada vez)
-  let brood = r.chance(EGG_HATCH_P * ANIMALS.galinha.season[today.season]);
+  const keep = [], brood = {}, flock = {};
+  for (const a of g.animals) if (a.owned) flock[a.sp] = (flock[a.sp] || 0) + 1;
   for (const e of w.drops) {
-    const age = today.day - e.day;
-    if (brood && e.f && age >= EGG_HATCH_DAYS && chicks < CHICKEN_CAP) {
-      brood = false;
+    const age = today.day - e.day, sp = e.sp || 'galinha', d = ANIMALS[sp];
+    // no máximo uma ninhada de cada espécie choca por dia (uma ave choca de cada vez)
+    if (brood[sp] === undefined) brood[sp] = r.chance(EGG_HATCH_P * d.season[today.season]);
+    if (brood[sp] && e.f && age >= EGG_HATCH_DAYS && (flock[sp] || 0) < CHICKEN_CAP) {
+      brood[sp] = false;
       const i = w.idx(e.x, e.y);
       const closed = !w.compOpen.has(w.comp[i]);
       const n = Math.min(e.n, r.int(1, 3));
-      const hen = g.animals.find(a => a.sp === 'galinha' && a.sex === 'f' && a.owned && Math.hypot(a.x - e.x - 0.5, a.y - e.y - 0.5) < 6);
-      for (let k = 0; k < n; k++) { const c = makeAnimal(g, 'galinha', e.x, e.y, { adult: false, owned: closed }); if (hen) c.mom = hen.id; }
-      chicks += n;
-      g.notify(`Chocaram ${n} pintinho${n > 1 ? 's' : ''}!${closed ? '' : ' Fora da cerca eles fogem.'}`, 'good');
+      const hen = g.animals.find(a => a.sp === sp && a.sex === 'f' && a.owned && Math.hypot(a.x - e.x - 0.5, a.y - e.y - 0.5) < 6);
+      for (let k = 0; k < n; k++) { const c = makeAnimal(g, sp, e.x, e.y, { adult: false, owned: closed }); if (hen) c.mom = hen.id; }
+      flock[sp] = (flock[sp] || 0) + n;
+      const young = d.young.toLowerCase();
+      g.notify(`Chocaram ${n} ${n > 1 ? young + 's' : young}!${closed ? '' : ' Fora da cerca eles fogem.'}`, 'good');
       continue;
     }
     if (age < 4 + (e.f ? 1 : 0)) keep.push(e);
@@ -492,15 +499,17 @@ export function animalsDay(g, today) {
   const wild = g.animals.filter(a => !a.owned).length;
   const arrive = [0.3, 0.22, 0.12, 0.06][today.season] * (wild < 15 ? 2 : 1);
   if (wild < WILD_TOTAL && r.chance(arrive)) {
-    const all = ['gado', 'porco', 'galinha', 'cavalo', 'ovelha', 'cabra'];
+    const all = Object.keys(ANIMALS);
     const low = all.filter(s => (wildCount[s] || 0) < 4);
     const sp = r.pick(low.length ? low : all.filter(s => (wildCount[s] || 0) < WILD_CAP));
     if (sp) {
       const res = herdArrives(g, sp, r.int(2, 4));
-      if (res) g.notify(`Uma manada de ${res.herd.length} ${ANIMALS[sp].name.toLowerCase()}${sp === 'gado' ? '' : 's'} selvage${res.herd.length > 1 ? 'ns' : 'm'} apareceu ao ${res.side} do mapa.`, 'info');
+      if (res) g.notify(`${res.herd.length > 1 ? `Um bando de ${res.herd.length}` : 'Um'} ${plural(ANIMALS[sp].name.toLowerCase(), res.herd.length, sp)} selvage${res.herd.length > 1 ? 'ns' : 'm'} apareceu ao ${res.side} do mapa.`, 'info');
     }
   }
 }
+
+function plural(n, k, sp) { if (k < 2 || sp === 'gado') return n; return n.endsWith('o') || n.endsWith('a') ? n + 's' : n; }
 
 // Bichos soltos também têm cria, na época, com limite por espécie.
 function wildBreed(g, a, born, wildCount) {

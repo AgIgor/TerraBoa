@@ -433,8 +433,9 @@ function drawGate(ctx, w, x, y, px, py) {
 function drawEggs(ctx, e) {
   const px = e.x * T + 10, py = e.y * T + 18;
   ctx.fillStyle = '#c9a060'; ctx.beginPath(); ctx.ellipse(px + 6, py + 4, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+  const egg = { pato: ['#e8f0e0', '#d4e4d0'], peru: ['#e8dcc4', '#d8c4a0'] }[e.sp] || ['#f5efe0', '#e8d2b0'];
   for (let k = 0; k < Math.min(5, e.n); k++) {
-    ctx.fillStyle = k % 2 ? '#f5efe0' : '#e8d2b0';
+    ctx.fillStyle = egg[k % 2];
     ctx.beginPath(); ctx.ellipse(px + k * 3, py + 2 - (k % 2), 2.2, 3, 0, 0, Math.PI * 2); ctx.fill();
   }
 }
@@ -502,6 +503,76 @@ function drawAnimal(ctx, a, now, hover) {
     ctx.fillStyle = '#222'; ctx.fillRect(10, -15, 1.2, 1.2);
     ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(-8, -11); ctx.lineTo(-10, -14); ctx.stroke();
     if (a.owned) { ctx.fillStyle = '#f0c020'; ctx.fillRect(7, -17, 2, 2); }
+  } else if (a.sp === 'pato') {
+    const baby = a.weight < d.adultW * 0.6, drake = a.sex === 'm' && !baby;
+    const body = baby ? '#f4e070' : drake ? '#ece8dc' : '#b08a5a';
+    ctx.strokeStyle = '#f08a20'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-1, -3); ctx.lineTo(-1 + legPh, 1.5); ctx.moveTo(2, -3); ctx.lineTo(2 - legPh, 1.5); ctx.stroke();
+    ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(-1, -6 + bob * 0.4, 8, 4.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-8, -7); ctx.lineTo(-12, -10); ctx.lineTo(-8, -4); ctx.fill(); // rabinho
+    if (!baby) { ctx.fillStyle = drake ? '#d8d2c2' : '#8a6a42'; ctx.beginPath(); ctx.ellipse(-2, -7, 5, 2.6, 0.15, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = drake ? '#2a7a4a' : body; ctx.beginPath(); ctx.ellipse(6, -11, 3.4, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(4.5, -10, 3, 4);
+    if (drake) { ctx.fillStyle = '#fff'; ctx.fillRect(4.5, -8, 3, 1); }
+    ctx.fillStyle = '#f0a020'; ctx.beginPath(); ctx.ellipse(10.5, -10.5, 3, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.fillRect(6.5, -12.5, 1.2, 1.2);
+    if (a.owned) { ctx.fillStyle = '#2a7ad0'; ctx.fillRect(-1, 0, 3, 1.5); }
+  } else if (a.sp === 'peru') {
+    const baby = a.weight < d.adultW * 0.6, tom = a.sex === 'm' && !baby;
+    ctx.strokeStyle = '#c8a070'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-1, -4); ctx.lineTo(-1 + legPh, 2); ctx.moveTo(3, -4); ctx.lineTo(3 - legPh, 2); ctx.stroke();
+    if (tom) { // leque da cauda
+      const cols = ['#5a3a22', '#7a5030', '#5a3a22', '#7a5030', '#5a3a22'];
+      for (let k = 0; k < 5; k++) { const ang = Math.PI * (0.62 + k * 0.19); ctx.fillStyle = cols[k]; ctx.beginPath(); ctx.moveTo(-4, -9); ctx.lineTo(-4 + Math.cos(ang) * 13, -9 - Math.sin(ang) * 13); ctx.lineTo(-4 + Math.cos(ang + 0.2) * 13, -9 - Math.sin(ang + 0.2) * 13); ctx.fill(); }
+      ctx.fillStyle = '#e8d8b0'; for (let k = 0; k < 5; k++) { const ang = Math.PI * (0.66 + k * 0.19); ctx.fillRect(-4 + Math.cos(ang) * 12 - 1, -9 - Math.sin(ang) * 12 - 1, 2, 2); }
+    }
+    ctx.fillStyle = baby ? '#c8b080' : '#4a3424'; ctx.beginPath(); ctx.ellipse(0, -8 + bob * 0.4, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = baby ? '#b09a6a' : '#6a4a30'; ctx.beginPath(); ctx.ellipse(-1, -8, 5, 3.5, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = baby ? '#c8b080' : '#8a9aa8'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(5, -10); ctx.lineTo(7, -16); ctx.stroke();
+    ctx.fillStyle = baby ? '#c8b080' : '#a8b8c8'; ctx.beginPath(); ctx.arc(7.5, -17, 2.6, 0, Math.PI * 2); ctx.fill();
+    if (!baby) { ctx.fillStyle = '#d0302a'; ctx.beginPath(); ctx.ellipse(8.5, -13.5, 1.4, 2.6, 0, 0, Math.PI * 2); ctx.fill(); if (tom) ctx.fillRect(9, -17, 1.2, 4); }
+    ctx.fillStyle = '#e0c080'; ctx.beginPath(); ctx.moveTo(9.5, -17.5); ctx.lineTo(11.5, -16.5); ctx.lineTo(9.5, -15.8); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.fillRect(7.5, -18, 1.1, 1.1);
+    if (a.owned) { ctx.fillStyle = '#2a7ad0'; ctx.fillRect(-1, 0, 3, 1.5); }
+  } else if (a.sp === 'coelho') {
+    const col = ['#f2efe8', '#9a7a5a', '#5a5450', '#d8c0a0'][a.id % 4];
+    const hop = Math.abs(Math.sin(a.step * 0.8)) * 2.5;
+    ctx.translate(0, -hop);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(-1, -5, 6.5, 4.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5, -8, 3.4, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4, -13.5, 1.2, 3.8, -0.2, 0, Math.PI * 2); ctx.ellipse(6, -13, 1.2, 3.8, 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8a8b0'; ctx.fillRect(4, -15, 0.8, 3); ctx.fillRect(6, -14.5, 0.8, 3);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-7.5, -6, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.fillRect(6, -9, 1.1, 1.1);
+    ctx.fillStyle = '#d88890'; ctx.fillRect(8, -7.5, 1, 1);
+    if (a.owned) { ctx.fillStyle = '#f0c020'; ctx.fillRect(1, -10, 2, 2); }
+  } else if (a.sp === 'lhama') {
+    const col = ['#f0e8d8', '#b08050', '#6a4a34', '#e8e0d0'][a.id % 4];
+    const fluff = 0.85 + Math.min(1, (a.wool || 0) / 4) * 0.3;
+    legs(ctx, [-7, -4, 5, 8], 0, 11, legPh, '#5a4636');
+    ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, -12 + bob * 0.3, 11 * fluff, 7 * fluff, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-11, -14); ctx.quadraticCurveTo(-15, -12, -12, -8); ctx.fill();
+    // pescoço comprido e cabeça
+    ctx.beginPath(); ctx.moveTo(6, -16); ctx.lineTo(10, -30); ctx.lineTo(15, -30); ctx.lineTo(12, -13); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(14, -31, 4.6, 3.4, 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = col === '#6a4a34' ? '#4a3424' : '#c8b8a0'; ctx.beginPath(); ctx.ellipse(18, -30, 2.2, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(11, -33); ctx.lineTo(11.5, -39); ctx.lineTo(13.5, -34); ctx.fill(); ctx.beginPath(); ctx.moveTo(14, -34); ctx.lineTo(15.5, -39); ctx.lineTo(16, -33); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.fillRect(15, -32.5, 1.4, 1.4);
+    if (a.owned) { ctx.fillStyle = '#d03040'; ctx.fillRect(11, -36, 3, 2); ctx.fillRect(15, -36, 2, 2); }
+  } else if (a.sp === 'bufalo') {
+    const wet = a.id % 2 ? '#3a3632' : '#4a4440';
+    legs(ctx, [-10, -5, 5, 10], 0, 9, legPh, '#2a2622');
+    ctx.fillStyle = wet; ctx.beginPath(); ctx.ellipse(0, -10 + bob * 0.3, 15, 8.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-4, -15, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(15, -12, 6, 5, 0.25, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a5450'; ctx.beginPath(); ctx.ellipse(20, -10, 3, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+    // chifres curvados para trás
+    ctx.strokeStyle = '#8a8274'; ctx.lineWidth = a.sex === 'm' ? 3 : 2.2;
+    ctx.beginPath(); ctx.moveTo(14, -16); ctx.quadraticCurveTo(8, -22, 5, -15); ctx.stroke();
+    ctx.fillStyle = '#ddd'; ctx.fillRect(16, -14, 1.5, 1.5);
+    if (a.sex === 'f' && isAdult(a)) { ctx.fillStyle = '#8a6a6a'; ctx.fillRect(-2, -3, 4, 2); }
+    ctx.strokeStyle = wet; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-14, -11); ctx.lineTo(-17, -3 + Math.sin(now / 300 + a.id) * 1.5); ctx.stroke();
+    if (a.owned) { ctx.fillStyle = '#f0c020'; ctx.fillRect(11, -18, 3, 3); }
   } else {
     const rooster = a.sex === 'm' && isAdult(a);
     const chick = a.weight < d.adultW * 0.6;

@@ -131,7 +131,7 @@ export class UI {
     $('wxLabel').textContent = weatherLabel(today, h);
     // inventário
     const groups = [
-      ['Colheita', ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'la']],
+      ['Colheita', ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'leite_cabra', 'leite_bufala', 'ovos', 'ovos_pato', 'la', 'fibra_lhama']],
       ['Sementes e mudas', ['sem_milho', 'sem_soja', 'muda_cana', 'muda_cafe', 'muda_pimenta', 'sem_capim']],
       ['Material', ['madeira', 'adubo', 'racao', 'bebedouro', 'aspersor', 'poco', 'silo']],
     ];
@@ -475,7 +475,7 @@ export class UI {
       <td><div class="btns"><button data-act="sella" data-id="${a.id}" ${dis}>Vender</button></div></td></tr>`).join('');
     const offers = ANIMAL_OFFERS.map((o, i) => `<tr><td>${o.name}</td><td class="num">${o.sp === 'galinha' ? '' : o.w + ' kg'}</td><td class="num">${fmt(offerPrice(g, o))}</td>
       <td><div class="btns"><button data-act="buya" data-i="${i}" ${dis || (g.money >= offerPrice(g, o) ? '' : 'disabled')}>Comprar</button></div></td></tr>`).join('');
-    const quotes = ['boi', 'porco', 'frango', 'cavalo', 'cordeiro', 'caprino'].map(id => `${COMMODITIES[id].name}: <b>${fmt(price(m, id))}</b>/${COMMODITIES[id].unit} <span class="${trend(m, id) >= 0 ? 'up' : 'down'}">${trend(m, id) >= 0 ? '▲' : '▼'}${Math.abs(trend(m, id) * 100).toFixed(1)}%</span>`).join(' · ');
+    const quotes = [...new Set(Object.values(ANIMALS).map(d => d.market))].map(id => `${COMMODITIES[id].name}: <b>${fmt(price(m, id))}</b>/${COMMODITIES[id].unit} <span class="${trend(m, id) >= 0 ? 'up' : 'down'}">${trend(m, id) >= 0 ? '▲' : '▼'}${Math.abs(trend(m, id) * 100).toFixed(1)}%</span>`).join(' · ');
     return `<p class="note">${quotes}</p>
       <div class="grid2"><div><h3>Seu rebanho</h3>${own.length ? `<table class="mk"><tr><th>Animal</th><th class="num">Peso</th><th class="num">Saúde</th><th class="num">Vale</th><th></th></tr>${rows}</table>` : '<p class="note">Nenhum animal ainda. Laçe os soltos no campo ou compre aqui.</p>'}</div>
       <div><h3>Comprar</h3><table class="mk"><tr><th>Animal</th><th class="num">Peso</th><th class="num">Preço</th><th></th></tr>${offers}</table>
@@ -593,6 +593,8 @@ export class UI {
         <li><b>Clima:</b> chuva e calor mudam a umidade; geada no inverno pode matar café e pimenta.</li>
         <li><b>Cavalo:</b> laçe um (ou compre), solte no pasto e aperte <kbd>X</kbd> perto dele para montar. A cavalo você corre mais e laça melhor.</li>
         <li><b>Ovelha e cabra:</b> tosquie a lã e ordenhe a cabra com a mão.</li>
+        <li><b>Pato, peru e coelho:</b> pata e perua botam ovos (os de pata valem mais) e chocam como a galinha. Coelho dá ninhadas grandes. O pato gosta da beira d'água.</li>
+        <li><b>Lhama e búfalo:</b> tosquie a fibra da lhama (vale bem mais que lã) e ordenhe a búfala. A lhama aguenta frio; o búfalo, calor, e gosta de água.</li>
         <li><b>Armazém:</b> a casa guarda 40 sacas de grão. Paiol (+80) e silo (+400) evitam que a colheita estrague. Leite e cana estragam rápido.</li>
         <li><b>Trator e peões:</b> o trator (cooperativa) faz 3×3 de uma vez; peões (janela Fazenda) regam, colhem e tratam dos bichos.</li>
         <li><b>Rio:</b> construa ponte (6 madeiras) em cima da água. Animais também passam.</li>
@@ -634,7 +636,7 @@ function spark(hist) {
 }
 function weightText(a) {
   if (a.sp === 'gado') return `${Math.round(a.weight)} kg <span class="unit">(${(a.weight / 15).toFixed(1)} @)</span>`;
-  if (a.sp === 'galinha') return `${a.weight.toFixed(1)} kg`;
+  if (ANIMALS[a.sp].adultW < 20) return `${a.weight.toFixed(1)} kg`;
   return `${Math.round(a.weight)} kg`;
 }
 function animalInfo(g, a) {
@@ -665,6 +667,16 @@ const ANIMAL_OFFERS = [
   { name: 'Carneiro', sp: 'ovelha', sex: 'm', w: 50 },
   { name: 'Cabra', sp: 'cabra', sex: 'f', w: 40 },
   { name: 'Bode', sp: 'cabra', sex: 'm', w: 45 },
+  { name: 'Pata', sp: 'pato', sex: 'f', w: 2.4 },
+  { name: 'Pato', sp: 'pato', sex: 'm', w: 3 },
+  { name: 'Perua', sp: 'peru', sex: 'f', w: 6 },
+  { name: 'Peru', sp: 'peru', sex: 'm', w: 9 },
+  { name: 'Coelha', sp: 'coelho', sex: 'f', w: 2.8 },
+  { name: 'Coelho', sp: 'coelho', sex: 'm', w: 3 },
+  { name: 'Lhama', sp: 'lhama', sex: 'f', w: 125 },
+  { name: 'Lhama macho', sp: 'lhama', sex: 'm', w: 140 },
+  { name: 'Búfala', sp: 'bufalo', sex: 'f', w: 420 },
+  { name: 'Búfalo', sp: 'bufalo', sex: 'm', w: 480 },
 ];
 function offerPrice(g, o) {
   const d = ANIMALS[o.sp], p = g.market.c[d.market].price;

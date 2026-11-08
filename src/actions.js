@@ -70,7 +70,7 @@ function hand(g, x, y, px, py) {
 
   // ovos no chão
   const e = w.drops.findIndex(d => d.x === x && d.y === y);
-  if (e >= 0) { const n = w.drops[e].n; w.drops.splice(e, 1); addItem(g, 'ovos', n); return say(`+${n} ovos`, 'good'); }
+  if (e >= 0) { const { n, sp } = w.drops[e], it = ANIMALS[sp || 'galinha'].eggItem; w.drops.splice(e, 1); addItem(g, it, n); return say(`+${n} ${ITEMS[it].name.toLowerCase()}`, 'good'); }
 
   // montar no trator ou no cavalo
   const mt = mountAt(g, px, py);
@@ -81,8 +81,8 @@ function hand(g, x, y, px, py) {
   if (a && !a.ridden) {
     const d = ANIMALS[a.sp];
     if (a.owned && d.wool && (a.wool || 0) >= 1) {
-      const kg = Math.floor(a.wool); a.wool -= kg; addItem(g, 'la', kg);
-      return say(`Tosquiou ${kg} kg de lã`, 'good');
+      const kg = Math.floor(a.wool), it = d.woolItem || 'la'; a.wool -= kg; addItem(g, it, kg);
+      return say(`Tosquiou ${kg} kg de ${ITEMS[it].name.toLowerCase()}`, 'good');
     }
     if (a.owned && d.milk && a.sex === 'f' && isAdult(a)) {
       const l = Math.floor(a.milk);

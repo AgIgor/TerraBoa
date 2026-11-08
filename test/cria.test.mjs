@@ -2,6 +2,7 @@
 import { newGame, advance } from '../src/game.js';
 import { makeAnimal, breedChance, breedText, herdArrives } from '../src/animals.js';
 import { G, O, YEAR_DAYS, ANIMALS } from '../src/config.js';
+import { useTool } from '../src/actions.js';
 
 let fails = 0;
 const check = (c, m) => { console.log((c ? '  ok: ' : '  FALHOU: ') + m); if (!c) fails++; };
@@ -47,7 +48,7 @@ console.log('# ano inteiro sem mexer: chegadas e cria selvagem com limite');
   arrivals = notes.filter(t => t.includes('apareceu')).length;
   const young = g.animals.filter(a => a.mom).length;
   console.log(`  começou com ${before}, ficou ${g.animals.length} (máx ${maxWild}); ${arrivals} manadas chegaram; ${young} com mãe`);
-  check(maxWild <= 50, 'população selvagem não explode');
+  check(maxWild <= 75, 'população selvagem não explode');
   check(g.animals.length >= before * 0.8, 'população selvagem não some');
   check(young > 0, 'bichos soltos tiveram cria');
 }
@@ -121,6 +122,32 @@ console.log('# filhote solto segue a mãe para dentro do pasto');
   calf.mom = mom.id;
   advance(g, 1440);
   check(calf.owned, 'bezerro ficou com o dono da mãe');
+}
+
+console.log('# bichos novos: pata bota ovo de pata, lhama dá fibra, búfala dá leite');
+{
+  const g = newGame(12), w = g.world;
+  const { x0, y0 } = pen(g);
+  g.animals = [];
+  const pata = makeAnimal(g, 'pato', x0 + 2, y0 + 2, { owned: true, sex: 'f' });
+  makeAnimal(g, 'pato', x0 + 3, y0 + 2, { owned: true, sex: 'm' });
+  const lhama = makeAnimal(g, 'lhama', x0 + 5, y0 + 3, { owned: true, sex: 'f' });
+  const bufala = makeAnimal(g, 'bufalo', x0 + 7, y0 + 5, { owned: true, sex: 'f', weight: 500 });
+  for (let d = 0; d < 12; d++) { for (const a of g.animals) { a.hunger = 1; a.thirst = 1; } advance(g, 1440); }
+  const ninho = w.drops.find(e => e.sp === 'pato');
+  check(!!ninho && ninho.f, 'pata botou ovo fértil');
+  if (ninho) {
+    g.player.x = ninho.x + 1.5; g.player.y = ninho.y + 0.5;
+    const r = useTool(g, 'mao', ninho.x, ninho.y, ninho.x + 0.5, ninho.y + 0.5);
+    check((g.inv.ovos_pato || 0) > 0, 'recolheu ovos de pata: ' + (r && r.msg));
+  }
+  for (const [a, item, nome] of [[lhama, 'fibra_lhama', 'fibra'], [bufala, 'leite_bufala', 'leite']]) {
+    g.player.x = a.x - 1; g.player.y = a.y;
+    const r = useTool(g, 'mao', Math.floor(a.x), Math.floor(a.y), a.x, a.y);
+    check((g.inv[item] || 0) > 0, `${nome}: ${r && r.msg}`);
+  }
+  const tipos = new Set(newGame(13).animals.map(a => a.sp));
+  check(tipos.size === Object.keys(ANIMALS).length, `todas as ${tipos.size} espécies aparecem soltas no mapa`);
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\nTudo certo.');

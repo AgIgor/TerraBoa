@@ -20,8 +20,16 @@ export const COMMODITIES = {
   cavalo:  { name: 'Cavalo', unit: 'cabeça', base: 950, amp: 0.05, peak: 0, vol: 0.020, depth: 8, animal: true },
   cordeiro: { name: 'Cordeiro', unit: 'kg vivo', base: 5.5, amp: 0.10, peak: 22, vol: 0.030, depth: 400, animal: true },
   caprino: { name: 'Cabrito', unit: 'kg vivo', base: 5, amp: 0.08, peak: 14, vol: 0.030, depth: 400, animal: true },
+  ovos_pato: { name: 'Ovos de pata', unit: 'unidade', base: 0.9, amp: 0.10, peak: 26, vol: 0.030, depth: 200 },
+  leite_bufala: { name: 'Leite de búfala', unit: 'litro', base: 3.2, amp: 0.12, peak: 44, vol: 0.025, depth: 150 },
+  fibra_lhama: { name: 'Fibra de lhama', unit: 'kg', base: 28, amp: 0.12, peak: 34, vol: 0.040, depth: 40 },
+  pato:    { name: 'Pato', unit: 'cabeça', base: 32, amp: 0.08, peak: 14, vol: 0.025, depth: 40, animal: true },
+  peru:    { name: 'Peru', unit: 'kg vivo', base: 9, amp: 0.25, peak: 13, vol: 0.030, depth: 200, animal: true },
+  coelho:  { name: 'Coelho', unit: 'kg vivo', base: 7, amp: 0.06, peak: 30, vol: 0.030, depth: 150, animal: true },
+  lhama:   { name: 'Lhama', unit: 'cabeça', base: 1800, amp: 0.05, peak: 0, vol: 0.020, depth: 6, animal: true },
+  bufalo:  { name: 'Búfalo', unit: 'arroba', base: 22, amp: 0.08, peak: 4, vol: 0.022, depth: 100, animal: true },
 };
-export const SELLABLE = ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'la', 'madeira'];
+export const SELLABLE = ['milho', 'soja', 'cana', 'cafe', 'pimenta', 'leite', 'ovos', 'leite_cabra', 'leite_bufala', 'ovos_pato', 'la', 'fibra_lhama', 'madeira'];
 
 // Insumos: preço ligado a uma commodity (semente cara quando o grão está caro).
 export const INPUTS = [
@@ -59,6 +67,9 @@ const NEWS = [
   { p: 0.004, text: 'Lã importada do Uruguai derruba preço', fx: { la: -0.15 } },
   { p: 0.004, text: 'Queijarias artesanais procuram leite de cabra', fx: { leite_cabra: 0.16, caprino: 0.05 } },
   { p: 0.003, text: 'Festa de Páscoa aquece venda de cordeiro', fx: { cordeiro: 0.12 } },
+  { p: 0.004, text: 'Pizzarias procuram muçarela de búfala', fx: { leite_bufala: 0.15, bufalo: 0.04 } },
+  { p: 0.003, text: 'Tecelagens pagam mais por fibra de lhama', fx: { fibra_lhama: 0.18 } },
+  { p: 0.003, text: 'Restaurantes aumentam pedidos de coelho', fx: { coelho: 0.12 } },
   { p: 0.003, text: 'Temporada de rodeios: cavalos valorizados', fx: { cavalo: 0.10 } },
   { p: 0.004, text: 'Diesel sobe nas bombas', fx: { dollar: 0.05 } },
   { p: 0.004, text: 'Construção civil aquecida: madeira valoriza', fx: { madeira: 0.15 } },

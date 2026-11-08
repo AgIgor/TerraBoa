@@ -85,7 +85,7 @@ export const ANIMALS = {
     name: 'Galinha', male: 'Galo', female: 'Galinha', young: 'Pintinho',
     forage: 0.08, water: 0.1, speed: 1.5, flee: 2.2, catch: 0.42,
     birthW: [0.05, 0.06], adultW: 1.6, maxW: 2.6, gain: 0.35, gestation: 4, litter: [1, 3], breed: 0.28, season: [1.3, 1.1, 0.8, 0.5], rest: 0, cover: 10,
-    heat: 30, cold: 8, size: 0.38, market: 'frango', sell: 'cabeca',
+    heat: 30, cold: 8, size: 0.38, market: 'frango', sell: 'cabeca', eggs: [2, 5], eggItem: 'ovos',
   },
   cavalo: {
     name: 'Cavalo', male: 'Cavalo', female: 'Égua', young: 'Potro',
@@ -105,6 +105,36 @@ export const ANIMALS = {
     birthW: [2.5, 4], adultW: 38, maxW: 62, gain: 2.3, gestation: 8, litter: [1, 2], breed: 0.2, season: [0.7, 0.9, 1.4, 1.0], rest: 4, cover: 25,
     heat: 35, cold: 0, size: 0.55, market: 'caprino', sell: 'kg', milk: 2.2, milkItem: 'leite_cabra',
   },
+  pato: {
+    name: 'Pato', male: 'Pato', female: 'Pata', young: 'Patinho',
+    forage: 0.1, water: 0.15, speed: 1.15, flee: 2.4, catch: 0.45,
+    birthW: [0.05, 0.07], adultW: 2.8, maxW: 4, gain: 0.5, gestation: 4, litter: [1, 3], breed: 0.25, season: [1.3, 1.1, 0.8, 0.5], rest: 0, cover: 6,
+    heat: 33, cold: 2, size: 0.42, market: 'pato', sell: 'cabeca', eggs: [1, 3], eggItem: 'ovos_pato', aquatic: true,
+  },
+  peru: {
+    name: 'Peru', male: 'Peru', female: 'Perua', young: 'Peruzinho',
+    forage: 0.15, water: 0.2, speed: 1.15, flee: 2.4, catch: 0.45,
+    birthW: [0.06, 0.08], adultW: 8, maxW: 14, gain: 0.9, gestation: 5, litter: [1, 3], breed: 0.2, season: [1.3, 1.1, 0.8, 0.5], rest: 0, cover: 8,
+    heat: 31, cold: 4, size: 0.55, market: 'peru', sell: 'kg', eggs: [0, 2], eggItem: 'ovos',
+  },
+  coelho: {
+    name: 'Coelho', male: 'Coelho', female: 'Coelha', young: 'Coelhinho',
+    forage: 0.05, water: 0.05, speed: 1.6, flee: 2.8, catch: 0.4,
+    birthW: [0.05, 0.08], adultW: 3, maxW: 5, gain: 0.35, gestation: 4, litter: [3, 6], breed: 0.3, season: [1.2, 1, 1, 0.7], rest: 2, cover: 8,
+    heat: 28, cold: -2, size: 0.32, market: 'coelho', sell: 'kg',
+  },
+  lhama: {
+    name: 'Lhama', male: 'Lhama macho', female: 'Lhama', young: 'Filhote de lhama',
+    forage: 0.6, water: 0.4, speed: 1.3, flee: 3.0, catch: 0.45,
+    birthW: [9, 14], adultW: 130, maxW: 200, gain: 2.2, gestation: 14, litter: [1, 1], breed: 0.12, season: [1.3, 1.1, 0.7, 0.6], rest: 8, cover: 20,
+    heat: 28, cold: -12, size: 0.85, market: 'lhama', sell: 'cabeca', wool: 0.25, woolItem: 'fibra_lhama',
+  },
+  bufalo: {
+    name: 'Búfalo', male: 'Búfalo', female: 'Búfala', young: 'Bezerro de búfala',
+    forage: 1.3, water: 1.3, speed: 1.0, flee: 2.6, catch: 0.5,
+    birthW: [35, 45], adultW: 450, maxW: 700, gain: 5, gestation: 13, litter: [1, 1], breed: 0.14, season: [0.8, 0.9, 1.4, 1.1], rest: 7, cover: 25,
+    heat: 36, cold: 0, size: 1.15, market: 'bufalo', sell: 'arroba', milk: 6, milkItem: 'leite_bufala', aquatic: true,
+  },
 };
 // 1 saca de milho (ou de ração) vale 0,8 unidade de pasto.
 // Quanto alimento (em unidades de pasto) cada saca rende no cocho. Ração é balanceada e rende mais.
@@ -122,6 +152,9 @@ export const ITEMS = {
   leite_cabra: { name: 'Leite de cabra', unit: 'L' },
   la: { name: 'Lã', unit: 'kg' },
   ovos: { name: 'Ovos', unit: 'un' },
+  ovos_pato: { name: 'Ovos de pata', unit: 'un' },
+  leite_bufala: { name: 'Leite de búfala', unit: 'L' },
+  fibra_lhama: { name: 'Fibra de lhama', unit: 'kg' },
   sem_milho: { name: 'Semente de milho', unit: 'un' },
   sem_soja: { name: 'Semente de soja', unit: 'un' },
   muda_cana: { name: 'Muda de cana', unit: 'un' },
@@ -183,7 +216,7 @@ export const GRAINS = ['milho', 'soja', 'cafe'];
 export const STORE_BASE = 40;
 export const STORE_ADD = { [O.PAIOL]: 80, [O.SILO]: 400 };
 // Perecíveis: fração perdida por dia
-export const SPOIL = { leite: 0.5, leite_cabra: 0.5, ovos: 0.12, cana: 0.25 };
+export const SPOIL = { leite: 0.5, leite_cabra: 0.5, leite_bufala: 0.5, ovos: 0.12, ovos_pato: 0.12, cana: 0.25 };
 
 // Montarias e máquinas
 export const SPEED = { walk: 4.2, sneak: 1.7, cavalo: 7.5, trator: 3.4 };

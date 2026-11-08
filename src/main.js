@@ -1,5 +1,5 @@
 // Liga tudo: jogo, desenho, interface e controles.
-import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED, BUSH_SLOW, G, O } from './config.js';
+import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED, BUSH_SLOW, G, O, ANIMALS, ITEMS } from './config.js';
 import { burst, treeFall, shakeTile } from './fx.js';
 import { newGame, advance, dayOf, hourOf } from './game.js';
 import * as Saves from './saves.js';
@@ -283,7 +283,7 @@ function movePlayer(dt) {
   // pega ovos ao passar por cima
   const ex = Math.floor(p.x), ey = Math.floor(p.y);
   const e = w.drops.findIndex(d => d.x === ex && d.y === ey);
-  if (e >= 0) { const n = w.drops[e].n; w.drops.splice(e, 1); g.inv.ovos = (g.inv.ovos || 0) + n; ui.toast(`+${n} ovos`, 'good'); }
+  if (e >= 0) { const { n, sp } = w.drops[e], it = ANIMALS[sp || 'galinha'].eggItem; w.drops.splice(e, 1); g.inv[it] = (g.inv[it] || 0) + n; ui.toast(`+${n} ${ITEMS[it].name.toLowerCase()}`, 'good'); }
 }
 
 let tipPin = null;

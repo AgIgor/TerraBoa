@@ -5,6 +5,7 @@ import { cropStage } from './sim.js';
 import { rainAt, tempAt } from './climate.js';
 import { hourOf, dayOf } from './game.js';
 import { isAdult } from './animals.js';
+import { fx, updateWind, updateFx, swayX, skew, shakeOffset, drawCloudShadows, drawParts, drawSmoke, drawRain, drawLeaves, smoke } from './fx.js';
 
 const T = TILE;
 
@@ -44,8 +45,12 @@ export class Renderer {
     const z = this.z, s = T * z;
     // câmera segue o jogador, presa ao mapa
     const halfW = this.vw / 2 / s, halfH = this.vh / 2 / s;
-    this.cam.x = clamp(p.x, Math.min(halfW, w.w / 2), Math.max(w.w - halfW, w.w / 2));
-    this.cam.y = clamp(p.y, Math.min(halfH, w.h / 2), Math.max(w.h - halfH, w.h / 2));
+    const tx = clamp(p.x, Math.min(halfW, w.w / 2), Math.max(w.w - halfW, w.w / 2));
+    const ty = clamp(p.y, Math.min(halfH, w.h / 2), Math.max(w.h - halfH, w.h / 2));
+    if (!this.camInit || Math.hypot(tx - this.cam.x, ty - this.cam.y) > 12) { this.cam.x = tx; this.cam.y = ty; this.camInit = true; }
+    else { const k = 1 - Math.exp(-dt * 7); this.cam.x += (tx - this.cam.x) * k; this.cam.y += (ty - this.cam.y) * k; }
+    updateWind(g.climate.days[0].wind, dt);
+    updateFx(dt, { cx: this.cam.x * T, cy: this.cam.y * T });
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = false;
@@ -80,6 +85,7 @@ export class Renderer {
       ctx.fillRect(x0 * T, y0 * T, (x1 - x0 + 1) * T, (y1 - y0 + 1) * T);
     }
     if (this.overlay) this.drawOverlay(ctx, w, x0, x1, y0, y1);
+    if (hour > 6 && hour < 18.5) drawCloudShadows(ctx, Math.max(0, today.cloud - 0.15) * 1.3);
 
     // ---- objetos e seres por profundidade ----
     const list = [];
@@ -100,11 +106,14 @@ export class Renderer {
     for (const it of list) {
       switch (it[1]) {
         case 0: this.drawCrop(ctx, w, it[2], it[3], now); break;
-        case 1: this.drawObj(ctx, w, it[2], it[3], season, doy, hour, now); break;
+        case 1: this.drawObj(ctx, w, it[2], it[3], season, doy, hour, now, p); break;
         case 2: {
           const b = it[2];
           const spr = b.kind === 'house' ? houseSprite() : coopSprite();
-          ctx.drawImage(spr, b.x * T - 4, (b.y + b.h) * T - spr.height + 2);
+          const by = (b.y + b.h) * T - spr.height + 2;
+          ctx.drawImage(spr, b.x * T - 4, by);
+          if (b.kind === 'house' && ((hour > 5 && hour < 8.5) || (hour > 17 && hour < 21.5)) && Math.random() < dt * 4)
+            smoke((b.x * T + 74) / T, (by + 26) / T);
           break;
         }
         case 3: drawEggs(ctx, it[2]); break;
@@ -114,6 +123,9 @@ export class Renderer {
         case 7: drawWorker(ctx, it[2]); break;
       }
     }
+    drawSmoke(ctx);
+    drawParts(ctx);
+
     // corda do laço
     ctx.strokeStyle = '#d9c38a'; ctx.lineWidth = 1;
     for (const led of g.animals) {
@@ -142,13 +154,18 @@ export class Renderer {
     const x = i % w.w, y = (i / w.w) | 0;
     const st = cropStage(c);
     const spr = cropSprite(c.type, st, !c.dead && c.health < 0.5);
-    ctx.drawImage(spr, x * T, y * T + T - spr.height + 4);
+    const k = st > 0 ? skew(i * 0.37) * (CROPS[c.type].tall ? 1.3 : 0.7) - shakeOffset(i) * 0.02 : 0;
+    if (k) {
+      ctx.save(); ctx.translate(x * T + 16, (y + 1) * T + 4); ctx.transform(1, 0, k, 1, 0, 0);
+      ctx.drawImage(spr, -16, -spr.height);
+      ctx.restore();
+    } else ctx.drawImage(spr, x * T, y * T + T - spr.height + 4);
     if (c.ripe && !c.dead && Math.floor(now / 400 + i) % 6 === 0) {
       ctx.fillStyle = 'rgba(255,255,220,0.9)'; ctx.fillRect(x * T + 22, y * T - 14, 2, 2);
     }
   }
 
-  drawObj(ctx, w, i, o, season, doy, hour, now) {
+  drawObj(ctx, w, i, o, season, doy, hour, now, p) {
     const x = i % w.w, y = (i / w.w) | 0, px = x * T, py = y * T, h = tileHash(x, y);
     switch (o) {
       case O.TREE: {
@@ -156,11 +173,23 @@ export class Renderer {
         // ipês florescem no fim do inverno (jul–set)
         const bloom = kind && (doy >= 40 || doy < 4);
         const spr = treeSprite(kind, season, bloom);
-        ctx.drawImage(spr, px - 12, py + T - spr.height + 6);
+        const top = py + T - spr.height + 6, sx = shakeOffset(i);
+        const CUT = 44; // linha que separa copa e tronco no sprite
+        ctx.drawImage(spr, 0, CUT, spr.width, spr.height - CUT, px - 12 + sx * 0.5, top + CUT, spr.width, spr.height - CUT);
+        const behind = p && p.y < y + 0.6 && p.y > y - 1.6 && Math.abs(p.x - (x + 0.5)) < 1.0;
+        if (behind) ctx.globalAlpha = 0.45;
+        ctx.drawImage(spr, 0, 0, spr.width, CUT + 2, px - 12 + swayX(h * 0.013) + sx * 1.4, top, spr.width, CUT + 2);
+        ctx.globalAlpha = 1;
         break;
       }
-      case O.BUSH: ctx.drawImage(bushSprite(season, h % 6), px, py); break;
-      case O.ROCK: ctx.drawImage(rockSprite(h % 3), px, py); break;
+      case O.BUSH: {
+        const k = skew(h * 0.021) * 0.8 - shakeOffset(i) * 0.05;
+        ctx.save(); ctx.translate(px + 16, py + 28); ctx.transform(1, 0, k, 1, 0, 0);
+        ctx.drawImage(bushSprite(season, h % 6), -16, -28);
+        ctx.restore();
+        break;
+      }
+      case O.ROCK: ctx.drawImage(rockSprite(h % 3), px + shakeOffset(i) * 0.6, py); break;
       case O.FENCE: drawFence(ctx, w, x, y, px, py); break;
       case O.GATE: drawGate(ctx, w, x, y, px, py); break;
       case O.TROUGH: {
@@ -234,21 +263,11 @@ export class Renderer {
 
   drawWeather(ctx, today, rainNow, hour, dt) {
     const { vw, vh } = this;
-    // chuva
-    const target = rainNow > 0 ? Math.min(500, 60 + rainNow * 45) : 0;
-    while (this.drops.length < target) this.drops.push({ x: Math.random() * vw, y: Math.random() * vh, v: 600 + Math.random() * 300 });
-    if (this.drops.length > target) this.drops.length = Math.floor(target);
-    if (this.drops.length) {
-      ctx.strokeStyle = 'rgba(190,210,240,0.55)'; ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (const d of this.drops) {
-        d.y += d.v * dt; d.x -= d.v * dt * 0.15;
-        if (d.y > vh) { d.y = -10; d.x = Math.random() * (vw + 100); }
-        ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 2, d.y - 10);
-      }
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(40,55,80,0.18)'; ctx.fillRect(0, 0, vw, vh);
-    }
+    // chuva com profundidade e respingos (intensidade pelos mm da hora)
+    const inten = rainNow > 0 ? Math.min(1, 0.15 + rainNow / 8) : 0;
+    drawRain(ctx, vw, vh, inten, dt);
+    if (inten > 0) { ctx.fillStyle = `rgba(40,55,80,${(0.08 + inten * 0.14).toFixed(3)})`; ctx.fillRect(0, 0, vw, vh); }
+    drawLeaves(ctx, vw, vh, dt, today.season);
     // relâmpagos
     if (today.storm && rainNow > 0 && Math.random() < dt * 0.15) this.flash = 1;
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${(this.flash * 0.5).toFixed(2)})`; ctx.fillRect(0, 0, vw, vh); this.flash -= dt * 4; }

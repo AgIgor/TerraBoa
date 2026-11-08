@@ -4,7 +4,8 @@ Jogo de fazenda top-down em HTML/Canvas. O mundo começa natural (campo, mata, r
 
 ## Como abrir
 
-Dê dois cliques em `iniciar.bat` (precisa do Python) — abre em http://127.0.0.1:8650/.
+Dê dois cliques em `iniciar.bat` (precisa do Python) — abre em http://127.0.0.1:8650/ com um servidor que não usa cache (`tools/servidor.py`).
+Antes de publicar, rode `python tools/versao.py`: ele carimba a versão de cada módulo no `index.html` para o navegador nunca misturar arquivo velho com novo.
 Os módulos ES não funcionam abrindo o `index.html` direto do disco.
 
 ## O que tem
@@ -14,7 +15,7 @@ Os módulos ES não funcionam abrindo o `index.html` direto do disco.
 - **Animais:** gado, porco, galinha, cavalo, ovelha e cabra soltos no mapa. Laço pega até 4 de uma vez, em fila; clique num deles com o laço para soltar (Shift para chegar devagar), pasto fechado com cerca e porteira, água (rio ou bebedouro) e cocho com ração/milho. Engordam, dão leite e ovos, dão cria e fogem se o pasto estiver aberto. Calor estressa (sombra de árvore ajuda).
 - **Clima:** quatro estações do cerrado/sul de Minas, El Niño/La Niña por ano, veranicos, frentes frias, ondas de calor, geada, chuva por hora, umidade do solo tile a tile e previsão de 5 dias.
 - **Mercado:** cada produto tem sazonalidade de safra/entressafra, passeio aleatório, notícias (China, dólar, safra dos EUA, gripe aviária...), choques do clima (geada dispara o café) e o seu próprio volume de venda derrubando o preço. Vende-se na cooperativa. Leite azeda em um dia.
-- Dia/noite com lanterna, chuva, relâmpagos, neblina, ipês florindo no fim do inverno. Salva sozinho no navegador.
+- Dia/noite com lanterna, chuva com respingos, relâmpagos, neblina, ipês florindo no fim do inverno. Vento do dia balança copas, lavouras e arbustos; partículas com gravidade (lascas, folhas, terra, água), sombras de nuvem, fumaça da chaminé e câmera suave — técnicas trazidas do Mata Viva. Salva sozinho no navegador.
 
 ## Controles
 

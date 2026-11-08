@@ -2,7 +2,7 @@
 import { TOOLS, PLANT_LIST, BUILD_LIST, ITEMS, CROPS, CROP_LIST, ANIMALS, G, O, REGADOR_MAX, YEAR_DAYS, SEASONS, TROUGH_MAX, FEEDER_MAX, WAGE, MAX_WORKERS, WORK_TASKS, DIESEL_PER_TILE, MAX_LED } from './config.js';
 import { COMMODITIES, SELLABLE, INPUTS, price, inputPrice, sell, trend } from './market.js';
 import { dateText, clockText, hourOf, dayOf } from './game.js';
-import { tempAt, weatherLabel, weatherIcon, ENSO, seasonParams, EVENT_TEXT } from './climate.js';
+import { tempAt, weatherLabel, weatherIcon, ENSO, seasonParams, EVENT_TEXT, windLabel } from './climate.js';
 import { animalLabel, animalValue, animalMarketQty, isAdult, makeAnimal } from './animals.js';
 import { fTemp, cropStage, storageCap, grainStock } from './sim.js';
 import { hireWorker, fireWorker } from './workers.js';
@@ -365,6 +365,7 @@ export class UI {
       <div class="grid2"><div class="card"><h3>${dt.season}, ano ${dt.year}</h3>
         <div class="kv"><span>Fenômeno do ano</span><b>${en.name}</b></div><p class="note">${en.text}</p>
         <div class="kv"><span>Dias sem chuva</span><b>${g.climate.dryStreak}</b></div>
+        <div class="kv"><span>Vento hoje</span><b>${windLabel(g.climate.days[0].wind)}</b></div>
         <div class="kv"><span>Temperatura agora</span><b>${tempAt(g.climate.days[0], h).toFixed(1)} °C</b></div></div>
         <div class="card"><h3>Como o clima pega na fazenda</h3><p class="note">Chuva molha a terra e enche bebedouros. Calor seca o solo mais rápido e estressa os animais (sombra de árvore ajuda). Geada queima lavoura e pasto, principalmente café, soja e pimenta em baixadas perto da água. Veranico na época de plantio sobe o preço de soja e milho.</p></div></div>`;
   }

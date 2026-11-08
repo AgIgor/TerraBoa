@@ -1,5 +1,6 @@
 // Liga tudo: jogo, desenho, interface e controles.
-import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED, BUSH_SLOW, G } from './config.js';
+import { TOOLS, REACH, LASSO_REACH, MIN_PER_SEC, SPEED, BUSH_SLOW, G, O } from './config.js';
+import { burst, treeFall, shakeTile } from './fx.js';
 import { newGame, advance, serialize, deserialize, dayOf, hourOf, SAVE_KEY } from './game.js';
 import { updateAnimals } from './animals.js';
 import { useTool, animalAt, mountAt, dismount } from './actions.js';
@@ -170,11 +171,47 @@ function dragUse(first) {
   mouse.lastTile = key;
   doUse(tool, t, tool === 'enxada' ? { hoeMode: mouse.hoeMode } : {});
 }
+// guarda o estado dos tiles em volta para saber o que a ação mudou (efeitos visuais)
+function snapTiles(w, x, y) {
+  const out = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!w.inside(x + dx, y + dy)) continue;
+    const i = w.idx(x + dx, y + dy);
+    out.push({ x: x + dx, y: y + dy, i, o: w.obj[i], gr: w.ground[i], crop: w.crops.get(i)?.harvests ?? (w.crops.has(i) ? 0 : -1), m: w.moist[i] });
+  }
+  return out;
+}
+function actionFx(tool, t, before, r) {
+  const w = g.world;
+  for (const b of before) {
+    const o = w.obj[b.i], gr = w.ground[b.i], cx = b.x + 0.5, cy = b.y + 0.6;
+    const crop = w.crops.get(b.i), harv = crop ? crop.harvests : -1;
+    if (b.o === O.TREE && o === O.TREE && b.x === t.x && b.y === t.y && tool === 'machado') { shakeTile(b.i); burst(cx, cy, 'madeira', 7, 12); burst(cx, cy - 0.6, 'folha', 3, 34, 0.6, 10); }
+    else if (b.o === O.TREE && o !== O.TREE) treeFall(cx, cy);
+    else if (b.o === O.BUSH && o !== O.BUSH) burst(cx, cy, 'folha', 14, 10, 0.4, 50);
+    else if (b.o === O.ROCK) { if (o === O.ROCK) shakeTile(b.i); burst(cx, cy, 'pedra', o === O.ROCK ? 6 : 14, 8); }
+    else if (b.o !== o && o !== O.NONE) burst(cx, cy, 'poeira', 6, 2, 0.4, 16);   // construiu
+    else if (b.o !== o && o === O.NONE) burst(cx, cy, 'madeira', 8, 8);            // desmontou
+    if (b.gr !== gr && gr === G.TILLED) burst(cx, cy, 'terra', 7, 3);
+    else if (b.gr !== gr && gr === G.PASTURE) burst(cx, cy, 'semente', 6, 10, 0.4, 20);
+    else if (b.gr !== gr) burst(cx, cy, 'terra', 5, 3);
+    if (b.crop === -1 && harv === 0) burst(cx, cy, 'semente', 5, 10, 0.3, 20);       // plantou
+    if (b.crop >= 0 && (harv === -1 || harv > b.crop)) burst(cx, cy - 0.2, 'palha', 9, 14); // colheu ou limpou
+    if (tool === 'regador' && w.moist[b.i] > b.m + 0.3) burst(cx, cy, 'agua', 10, 14, 0.4, 25);
+  }
+  if (tool === 'regador' && /cheio/.test(r.msg || '')) burst(t.x + 0.5, t.y + 0.5, 'agua', 12, 2, 0.4, 60);
+  if (/ovos/.test(r.msg || '')) burst(t.x + 0.5, t.y + 0.6, 'palha', 6, 4);
+  if (/lã/.test(r.msg || '')) burst(t.px, t.py, 'la', 14, 14, 0.5, 30);
+}
+
 function doUse(tool, t, opts = {}) {
   const p = g.player;
   const dx = t.x + 0.5 - p.x, dy = t.y + 0.5 - p.y;
   if (Math.hypot(dx, dy) > 0.3) { const l = Math.hypot(dx, dy); p.fx = dx / l; p.fy = dy / l; }
+  const w = g.world, inside = w.inside(t.x, t.y);
+  const before = inside ? snapTiles(w, t.x, t.y) : null;
   const r = useTool(g, tool, t.x, t.y, t.px, t.py, opts);
+  if (r && r.ok !== false && before) actionFx(tool, t, before, r);
   if (!r) return;
   if (r.open === 'market') { ui.open('mercado', { atCoop: true, force: true }); return; }
   if (r.slept) save();
@@ -212,6 +249,14 @@ function movePlayer(dt) {
   p.x = Math.max(0.3, Math.min(w.w - 0.3, p.x));
   p.y = Math.max(0.3, Math.min(w.h - 0.2, p.y));
   p.step += Math.hypot(sx, sy) * (p.mount ? 3 : 5);
+  // mato farfalha; poeira nos pés em chão de terra
+  const fi = w.idx(Math.floor(p.x), Math.floor(p.y));
+  if (w.obj[fi] === O.BUSH) { shakeTile(fi, 0.12); if (Math.random() < dt * 6) burst(p.x, p.y, 'folha', 1, 10, 0.35, 18); }
+  else {
+    const gr = w.ground[fi];
+    const dusty = gr === G.DIRT || gr === G.PATH || gr === G.YARD || gr === G.TILLED || gr === G.SAND;
+    if (dusty && Math.random() < dt * (p.mount ? 12 : 3.5)) burst(p.x - p.fx * 0.2, p.y + 0.05, 'poeira', 1, 1, 0.12, 8);
+  }
   if (p.mount?.kind === 'trator') { const v = g.vehicles.find(v => v.id === p.mount.id); if (v) { v.x = p.x; v.y = p.y; v.fx = p.fx; } }
   // pega ovos ao passar por cima
   const ex = Math.floor(p.x), ey = Math.floor(p.y);

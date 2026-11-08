@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Terra Boa</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=220d7a50">
 </head>
 <body>
   <div id="game"></div>
@@ -53,6 +53,27 @@
     </div>
   </div>
 
-  <script type="module" src="src/main.js"></script>
+    <script type="importmap">
+{
+  "imports": {
+    "./src/actions.js": "./src/actions.js?v=b20669df",
+    "./src/animals.js": "./src/animals.js?v=141f4742",
+    "./src/art.js": "./src/art.js?v=6878d9f4",
+    "./src/climate.js": "./src/climate.js?v=1814cb9f",
+    "./src/config.js": "./src/config.js?v=42d56044",
+    "./src/fx.js": "./src/fx.js?v=5f4b7204",
+    "./src/game.js": "./src/game.js?v=86462c64",
+    "./src/main.js": "./src/main.js?v=3b95d296",
+    "./src/market.js": "./src/market.js?v=432d0abe",
+    "./src/render.js": "./src/render.js?v=cd43a346",
+    "./src/rng.js": "./src/rng.js?v=29d4486e",
+    "./src/sim.js": "./src/sim.js?v=5b7a5a1c",
+    "./src/ui.js": "./src/ui.js?v=f9c1c306",
+    "./src/workers.js": "./src/workers.js?v=81144f66",
+    "./src/world.js": "./src/world.js?v=fd8fd8a8"
+  }
+}
+</script>
+  <script type="module" src="src/main.js?v=3b95d296"></script>
 </body>
 </html>

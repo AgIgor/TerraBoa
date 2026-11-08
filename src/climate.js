@@ -77,9 +77,12 @@ export function genDay(c, rng, day) {
     rainStart = si === 1 || si === 0 ? rng.int(13, 17) : rng.int(0, 20);
   }
   c.prevRain = rain > 0;
+  const cloud = rain > 0 ? 0.85 : rng.range(0, 0.6);
+  // vento: chuva e frente fria ventam mais; tempestade venta forte; agosto é mês de ventania
+  let wind = 0.25 + cloud * 0.45 + (rain > 0 ? 0.25 : 0) + (storm ? 1.0 : 0) + (event === 'frente' ? 0.55 : 0) + (doy >= 40 ? 0.35 : 0);
   return {
     day, doy, season: si, tMin: round1(tMin), tMax: round1(tMax), rain, rainStart, rainHours,
-    frost, storm, event, cloud: rain > 0 ? 0.85 : rng.range(0, 0.6),
+    frost, storm, event, cloud, wind: Math.round(wind * 100) / 100,
   };
 }
 
@@ -124,6 +127,8 @@ export function weatherIcon(d, h = 12) {
   const l = weatherLabel(d, h);
   return { 'Tempestade': '⛈️', 'Tempestade à tarde': '⛈️', 'Garoa': '🌦️', 'Chuva': '🌧️', 'Pancadas de chuva': '🌦️', 'Geada': '❄️', 'Calor forte': '🔥', 'Nublado': '☁️', 'Frio': '🌥️', 'Ensolarado': '☀️' }[l] || '☀️';
 }
+
+export function windLabel(v = 0.35) { return v < 0.45 ? 'fraco' : v < 0.9 ? 'moderado' : v < 1.4 ? 'forte' : 'ventania'; }
 
 export const EVENT_TEXT = {
   veranico: 'Veranico: dias secos no meio da época de chuva',

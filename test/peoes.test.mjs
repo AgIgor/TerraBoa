@@ -3,7 +3,7 @@ import { newGame, advance, advanceWithAnimals } from '../src/game.js';
 import { makeAnimal } from '../src/animals.js';
 import { hireWorker } from '../src/workers.js';
 import { productCap } from '../src/sim.js';
-import { G, O, PROD_BASE } from '../src/config.js';
+import { G, O, PROD_BASE, MAX_WORKERS } from '../src/config.js';
 
 let fails = 0;
 const check = (c, m) => { console.log((c ? '  ok: ' : '  FALHOU: ') + m); if (!c) fails++; };
@@ -90,6 +90,19 @@ console.log('# armazém conserva');
   }
   console.log(`  leite perdido em 1 dia: sem armazém ${lost[0]} L, com armazém ${lost[1]} L`);
   check(lost[1] < lost[0] / 2, 'armazém segura o leite');
+}
+
+{
+  console.log('Limite de peões');
+  const g = newGame(81);
+  for (let k = 0; k < MAX_WORKERS; k++) hireWorker(g, 'colher');
+  const names = new Set(g.workers.map(k => k.name));
+  check(g.workers.length === MAX_WORKERS && MAX_WORKERS >= 8, `contratou ${g.workers.length}`);
+  check(names.size === g.workers.length, 'nomes sem repetir');
+  check(hireWorker(g, 'colher') === null, 'não passa do limite');
+  const t0 = performance.now(); advanceWithAnimals(g, 24 * 60, 1); const ms = performance.now() - t0;
+  console.log(`  ${MAX_WORKERS} peões trabalhando 1 dia: ${ms.toFixed(0)} ms`);
+  check(ms < 4000, 'roda leve com todos os peões');
 }
 
 console.log(fails ? `\n${fails} FALHA(S)` : '\nTudo certo.');

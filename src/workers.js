@@ -4,7 +4,7 @@ import { CROPS, ANIMALS, ITEMS, O, WAGE, MAX_WORKERS, REGADOR_MAX, TROUGH_MAX, F
 import { harvestCrop } from './actions.js';
 import { sell, SELLABLE } from './market.js';
 
-const NAMES = ['Zé', 'Tião', 'Dito', 'Cida', 'Juca', 'Neusa', 'Bento', 'Lurdes', 'Chico', 'Rita'];
+const NAMES = ['Zé', 'Tião', 'Dito', 'Cida', 'Juca', 'Neusa', 'Bento', 'Lurdes', 'Chico', 'Rita', 'Tonho', 'Dirce', 'Badu', 'Fia'];
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 // ordem dos serviços de cada tarefa

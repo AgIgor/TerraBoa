@@ -596,6 +596,7 @@ export class UI {
     const can = g.workers.length < MAX_WORKERS;
     return `<p class="note">Cada peão ganha R$ ${WAGE} por dia, pago à meia-noite (sem dinheiro, ele vai embora). Trabalha das 6h às 18h e, sem serviço da tarefa dele, ajuda no que tiver. ${Object.values(WORK_TASKS).map(t => `<b>${t.name}:</b> ${t.hint}`).join(' ')}</p>
       <p class="note"><b>Produção:</b> 📦 guarda no estoque (o armazém conserva) ou 💰 vende direto na cooperativa pelo preço do dia, com 5% de frete. Clique para trocar.</p>
+      <p class="note"><b>${g.workers.length} de ${MAX_WORKERS} peões</b> · diárias de R$ ${g.workers.length * WAGE} por dia.</p>
       ${rows ? `<table class="mk"><tr><th>Peão</th><th>Tarefa</th><th>Produção</th><th></th></tr>${rows}</table>` : ''}
       <p style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${Object.entries(WORK_TASKS).map(([id, t]) => `<button class="btn" data-act="hire" data-task="${id}" ${can ? '' : 'disabled'}>Contratar para ${t.name.toLowerCase()}</button>`).join('')}</p>
       ${can ? '' : `<p class="note">Máximo de ${MAX_WORKERS} peões.</p>`}`;

@@ -231,7 +231,7 @@ export const SPEED = { walk: 4.2, sneak: 1.7, cavalo: 7.5, trator: 3.4 };
 export const BUSH_SLOW = 0.4; // fração da velocidade dentro do mato
 export const DIESEL_PER_TILE = 0.18;
 export const WAGE = 28;       // diária do peão
-export const MAX_WORKERS = 3;
+export const MAX_WORKERS = 8;
 export const WORK_TASKS = {
   regar: { name: 'Regar lavouras', hint: 'Molha as lavouras secas. Sem isso, enche bebedouros e colhe.' },
   colher: { name: 'Colher', hint: 'Colhe o que estiver maduro. Sem isso, limpa lavoura morta, rega e recolhe ovos.' },

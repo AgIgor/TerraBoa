@@ -170,14 +170,33 @@ function adjacentTo(w, x, y, test) {
 
 const tileOf = a => [Math.floor(a.x), Math.floor(a.y)];
 
+// Jogador pelo id ('host' = anfitrião ou jogo sozinho)
+export function playerById(g, id) {
+  id = id || 'host';
+  if ((g.player.id || 'host') === id) return g.player;
+  return g.others?.[id] || null;
+}
+
 // --- movimento por quadro (dt em segundos reais já multiplicado pela velocidade) ---
 export function updateAnimals(g, dt) {
-  const w = g.world, p = g.player;
-  const chain = g.animals.filter(a => a.led).sort((a, b) => (a.ledSeq || 0) - (b.ledSeq || 0));
+  const w = g.world, players = [g.player, ...Object.values(g.others || {})];
+  // cada jogador leva a sua fila de animais no laço
+  const chains = new Map();
+  for (const a of g.animals) if (a.led) { const k = a.ledBy || 'host'; if (!chains.has(k)) chains.set(k, []); chains.get(k).push(a); }
+  for (const c of chains.values()) c.sort((a, b) => (a.ledSeq || 0) - (b.ledSeq || 0));
   for (const a of g.animals) {
     const d = ANIMALS[a.sp];
-    if (a.ridden) { a.x = p.x; a.y = p.y + 0.01; a.face = p.fx >= 0 ? 1 : -1; if (p.moving) a.step += dt * 9; continue; }
+    if (a.ridden) {
+      const r = playerById(g, a.riddenBy);
+      // quem montava saiu do jogo: o cavalo fica onde está
+      if (!r || !r.mount || r.mount.id !== a.id) { a.ridden = false; a.riddenBy = null; a.path = []; settleAnimal(w, a); continue; }
+      a.x = r.x; a.y = r.y + 0.01; a.face = r.fx >= 0 ? 1 : -1; if (r.moving) a.step += dt * 9; continue;
+    }
     if (a.led) {
+      const p = playerById(g, a.ledBy);
+      // quem levava saiu do jogo: o animal fica na fazenda, solto ali
+      if (!p) { a.led = false; a.ledBy = null; a.owned = true; a.path = []; settleAnimal(w, a); continue; }
+      const chain = chains.get(a.ledBy || 'host');
       // segue quem está na frente da fila, mantendo distância
       const k = chain.indexOf(a);
       const lead = k <= 0 ? p : chain[k - 1];
@@ -194,8 +213,11 @@ export function updateAnimals(g, dt) {
       continue;
     }
 
-    const pd = Math.hypot(p.x - a.x, p.y - a.y);
-    if (!a.owned && a.fleeing <= 0 && pd < (p.sneak ? d.flee * 0.4 : d.flee)) startFlee(g, a);
+    if (!a.owned && a.fleeing <= 0) {
+      for (const p of players) {
+        if (Math.hypot(p.x - a.x, p.y - a.y) < (p.sneak ? d.flee * 0.4 : d.flee)) { startFlee(g, a, p); break; }
+      }
+    }
     if (a.fleeing > 0) a.fleeing -= dt;
 
     if (a.path.length) {
@@ -219,8 +241,8 @@ export function updateAnimals(g, dt) {
   }
 }
 
-export function startFlee(g, a) {
-  const w = g.world, p = g.player;
+export function startFlee(g, a, p = g.player) {
+  const w = g.world;
   const [x, y] = tileOf(a);
   let best = null, bestD = -1;
   for (let k = 0; k < 10; k++) {

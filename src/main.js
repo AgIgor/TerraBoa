@@ -4,7 +4,8 @@ import { burst, treeFall, shakeTile } from './fx.js';
 import { newGame, advance, dayOf, hourOf } from './game.js';
 import * as Saves from './saves.js';
 import { updateAnimals } from './animals.js';
-import { useTool, animalAt, mountAt, dismount } from './actions.js';
+import { useTool, animalAt, toggleMount as toggleMountAt, pickEggsAt } from './actions.js';
+import { Net } from './net.js';
 import { updateWorkers } from './workers.js';
 import { Renderer } from './render.js';
 import { UI } from './ui.js';
@@ -20,14 +21,74 @@ ui.refreshTools();
 ui.showTitle();
 
 function hook(game) {
-  game.onNotify = (t, k) => ui.toast(t, k);
+  game.onNotify = (t, k) => { ui.toast(t, k); net.relay(t, k); };
 }
+
+// ---------- jogar junto ----------
+const net = new Net({
+  game: () => g,
+  setGame: ng => { setGame(ng); started = true; ui.started = true; ui.hideTitle(); ui.close(); },
+  toast: (t, k) => ui.toast(t, k),
+  left: reason => { backHome(); ui.toast(reason, 'bad'); },
+  changed: () => { if (ui.panel === 'menu') ui.render(); },
+  result: (req, r) => {
+    if (req?.before) actionFx(req.tool, req.t, req.before, r || {});
+    if (!r) return;
+    if (r.open === 'market') { ui.open('mercado', { atCoop: true, force: true }); return; }
+    if (r.msg) ui.toast(r.msg, r.kind);
+    ui.refreshTools();
+  },
+  cmdResult: r => ui.cmdResult(r),
+  speed: sp => ui.setSpeed(sp),
+  speedShown: () => ui.syncSpeed(),
+});
+ui.net = net;
+// saiu da sala (ou ela caiu): volta para a própria fazenda, que nunca foi tocada
+function backHome() {
+  const own = (Saves.lastId() && Saves.loadFarm(Saves.lastId())) || newGame();
+  setGame(own);
+  started = false; ui.started = false;
+  ui.showTitle();
+}
+ui.onNet = async (act, d) => {
+  if (act === 'nethost') {
+    if (net.isClient) return ui.toast('Saia da sala do amigo antes de abrir a sua.', 'bad');
+    if (!g.farmId || g.remote) return ui.toast('Abra uma fazenda sua para receber amigos.', 'bad');
+    ui.toast('Abrindo sala…');
+    try {
+      g.player.name = d.name;
+      const code = await net.host(d.name);
+      save(true);
+      ui.toast(`Sala ${code} aberta. Passe o código para quem vai jogar.`, 'good');
+    } catch (e) { ui.toast(e.message, 'bad'); }
+    if (ui.panel === 'menu') ui.render();
+    return;
+  }
+  if (act === 'netjoin') {
+    if (net.isHost) { ui.toast('Feche a sua sala antes de entrar em outra.', 'bad'); return false; }
+    save(true); // guarda a fazenda própria antes de sair dela
+    try {
+      await net.join(d.code, d.name);
+      ui.toast(`Você entrou na fazenda ${g.farmName || 'do amigo'}. Bom trabalho!`, 'good');
+      return true;
+    } catch (e) {
+      ui.netError = e.message;
+      ui.toast(e.message, 'bad');
+      return false;
+    }
+  }
+  if (act === 'netleave') {
+    if (net.isClient) { net.leave(); backHome(); ui.toast('Você saiu da sala.'); }
+    else if (net.isHost) { net.leave(); ui.toast('Sala fechada.'); if (ui.panel === 'menu') ui.render(); }
+  }
+};
 function setGame(ng) {
   g = ng; hook(g); ui.setGame(g);
   lastDay = dayOf(g); tipPin = null; R.camInit = false; keys.clear();
 }
 function enter() { started = true; ui.started = true; }
 ui.onTitle = (act, arg) => {
+  if ((act === 'new' || act === 'load') && net.active) net.leave();
   if (act === 'continue') {
     if (!g.farmId) { const id = Saves.lastId(); if (id) setGame(Saves.loadFarm(id)); }
     enter(); return true;
@@ -57,11 +118,12 @@ ui.onSave = save;
 
 // Salva a fazenda aberta. Miniatura só quando pedido (manual) ou uma vez por dia.
 function save(withThumb = false) {
-  if (!started || !g.farmId) return { ok: true };
+  if (!started || !g.farmId || g.remote) return { ok: true }; // convidado nunca salva a fazenda do anfitrião
+
   return Saves.saveFarm(g, withThumb ? ui.thumb(g) : undefined);
 }
-window.addEventListener('beforeunload', () => save());
-document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+window.addEventListener('beforeunload', () => { if (net.isHost) net.broadcast({ t: 'bye' }); save(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); net.hostVisible(!document.hidden); });
 
 // ---------- entrada ----------
 const keys = new Set();
@@ -127,16 +189,8 @@ document.getElementById('tHand').onclick = () => act('mao', true);
 document.getElementById('tMount').onclick = () => toggleMount();
 
 function toggleMount() {
-  const p = g.player;
-  let r;
-  if (p.mount) r = dismount(g);
-  else {
-    // monta no trator ou cavalo mais perto
-    const cands = [...g.vehicles, ...g.animals.filter(a => a.sp === 'cavalo' && a.owned && !a.led)]
-      .map(o => [o, Math.hypot(o.x - p.x, o.y - p.y)]).filter(([, d]) => d < 2).sort((a, b) => a[1] - b[1]);
-    r = cands.length ? mountAt(g, cands[0][0].x, cands[0][0].y) : null;
-    if (!r) r = { msg: 'Nada para montar aqui. Chegue perto de um cavalo seu ou do trator.', kind: 'bad' };
-  }
+  if (net.isClient) { net.act('mount', { x: 0, y: 0 }); return; }
+  const r = toggleMountAt(g);
   if (r?.msg) ui.toast(r.msg, r.kind);
 }
 document.getElementById('layerBtn').onclick = cycleOverlay;
@@ -232,7 +286,11 @@ function doUse(tool, t, opts = {}) {
   if (Math.hypot(dx, dy) > 0.3) { const l = Math.hypot(dx, dy); p.fx = dx / l; p.fy = dy / l; }
   const w = g.world, inside = w.inside(t.x, t.y);
   const before = inside ? snapTiles(w, t.x, t.y) : null;
+  // convidado: o anfitrião faz e devolve o resultado (efeitos aparecem quando voltar)
+  if (net.isClient) { net.act('use', { tool, x: t.x, y: t.y, px: t.px, py: t.py, opts }, { tool, t, before }); return; }
   const r = useTool(g, tool, t.x, t.y, t.px, t.py, opts);
+  net.markAround(t.x, t.y);
+  if (r?.slept && net.isHost) { net.note(`${g.player.name || 'O anfitrião'} foi dormir. Bom dia!`, 'good'); net.sendWorld(); }
   if (r && r.ok !== false && before) actionFx(tool, t, before, r);
   if (!r) return;
   if (r.open === 'market') { ui.open('mercado', { atCoop: true, force: true }); return; }
@@ -282,10 +340,13 @@ function movePlayer(dt) {
   if (p.mount?.kind === 'trator') { const v = g.vehicles.find(v => v.id === p.mount.id); if (v) { v.x = p.x; v.y = p.y; v.fx = p.fx; } }
   // pega ovos ao passar por cima
   const ex = Math.floor(p.x), ey = Math.floor(p.y);
-  const e = w.drops.findIndex(d => d.x === ex && d.y === ey);
-  if (e >= 0) { const { n, sp } = w.drops[e], it = ANIMALS[sp || 'galinha'].eggItem; w.drops.splice(e, 1); g.inv[it] = (g.inv[it] || 0) + n; ui.toast(`+${n} ${ITEMS[it].name.toLowerCase()}`, 'good'); }
+  if (!w.drops.some(d => d.x === ex && d.y === ey)) { eggAsk = null; return; }
+  if (net.isClient) { const k = ex + ',' + ey; if (eggAsk !== k) { eggAsk = k; net.act('eggs', { x: ex, y: ey }); } return; }
+  const r = pickEggsAt(g, ex, ey);
+  if (r?.msg) ui.toast(r.msg, r.kind);
 }
 
+let eggAsk = null;
 let tipPin = null;
 function pinTip() {
   const t = mouseTarget();
@@ -299,12 +360,15 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   movePlayer(dt);
-  const running = !g.paused && !ui.isOpen();
-  if (running) {
+  // em sala, painel aberto não pausa o jogo (os outros continuam jogando)
+  const running = !g.paused && (net.active || !ui.isOpen());
+  if (net.isClient) { /* o anfitrião simula; aqui só suaviza o que chega */ }
+  else if (running) {
     updateAnimals(g, dt * Math.sqrt(g.speed));
     updateWorkers(g, dt * Math.sqrt(g.speed), hourOf(g));
     advance(g, dt * MIN_PER_SEC * g.speed);
   } else updateAnimals(g, 0);
+  net.update(dt);
   if (dayOf(g) !== lastDay) { lastDay = dayOf(g); const r = save(true); if (r && !r.ok) ui.toast(r.reason, 'bad'); }
 
   // alvo e dica
@@ -338,3 +402,4 @@ requestAnimationFrame(frame);
 // para depurar no console
 window.__game = () => g;
 window.__R = R;
+window.__net = net;

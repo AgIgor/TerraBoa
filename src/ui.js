@@ -8,6 +8,11 @@ import { fTemp, cropStage, storageCap, grainStock } from './sim.js';
 import { hireWorker, fireWorker } from './workers.js';
 import * as Saves from './saves.js';
 import { generateWorld } from './world.js';
+import { COMMANDS, runCommand, ANIMAL_OFFERS, offerPrice, tractorPrice } from './commands.js';
+
+const NICK_KEY = 'terraboa-nome';
+const nick = () => { try { return localStorage.getItem(NICK_KEY) || ''; } catch { return ''; } };
+const setNick = v => { try { localStorage.setItem(NICK_KEY, v); } catch { /* sem storage */ } };
 
 const $ = id => document.getElementById(id);
 const fmt = v => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -49,8 +54,13 @@ export class UI {
 
   setSpeed(s) {
     const g = this.g;
+    if (this.net?.isClient) { this.net.speed(s); return; }
     if (s === 0) g.paused = !g.paused;
     else { g.speed = s; g.paused = false; }
+    this.syncSpeed();
+  }
+  syncSpeed() {
+    const g = this.g;
     for (const b of $('speeds').children) b.classList.toggle('on', g.paused ? b.dataset.speed === '0' : +b.dataset.speed === g.speed);
   }
 
@@ -240,6 +250,17 @@ export class UI {
           return this.onTitle('new', { name: $('tName').value, seed });
         }
         case 'play': if (this.onTitle('load', d.id)) this.hideTitle(); return;
+        case 'join': {
+          const name = $('tNick').value.trim().slice(0, 20) || 'Fazendeiro', code = $('tCode').value.trim();
+          if (code.length < 4) { $('tNetMsg').textContent = 'Digite o código da sala.'; return; }
+          setNick(name);
+          $('tNetMsg').textContent = 'Conectando…'; b.disabled = true;
+          Promise.resolve(this.onNet && this.onNet('netjoin', { name, code })).then(ok => {
+            if (ok) this.hideTitle();
+            else { b.disabled = false; if ($('tNetMsg')) $('tNetMsg').textContent = this.netError || 'Não deu para entrar.'; }
+          });
+          return;
+        }
         case 'dup': if (Saves.duplicateFarm(d.id)) this.renderTitle('farms'); else this.toast('Sem espaço para a cópia.', 'bad'); return;
         case 'export': return this.download(d.id);
         case 'import': return $('tFile').click();
@@ -289,6 +310,7 @@ export class UI {
         ${last ? `<button class="tbtn primary" data-tact="continue"><span class="tline">${last.thumb ? `<img src="${last.thumb}" alt="">` : ''}<span>Continuar: ${esc(last.name)}<small>${Saves.describe(last)}</small></span></span></button>` : ''}
         <button class="tbtn ${last ? '' : 'primary'}" data-tact="view" data-view="new">Nova fazenda<small>Escolha o mapa e dê um nome; as outras fazendas continuam guardadas</small></button>
         <button class="tbtn" data-tact="view" data-view="farms">Minhas fazendas<small>${farms.length ? `${farms.length} salva${farms.length > 1 ? 's' : ''} · carregar, renomear, copiar, exportar` : 'Nenhuma ainda · importar arquivo'}</small></button>
+        <button class="tbtn" data-tact="view" data-view="online">Jogar junto<small>Entrar na fazenda de um amigo com o código da sala</small></button>
         <button class="tbtn" data-tact="view" data-view="help">Como jogar<small>Controles e dicas</small></button>`;
     } else if (view === 'new') {
       this.newSeed = (Math.random() * 1e9) | 0;
@@ -310,6 +332,13 @@ export class UI {
         <input type="file" id="tFile" accept=".json,application/json" hidden>
         <p class="note">Saves ficam neste navegador (${Saves.storageKB()} KB usados). Exporte para guardar fora ou levar para outro aparelho.</p>
         <button class="tbtn" data-tact="import">Importar fazenda de um arquivo<small>.json exportado pelo Terra Boa</small></button>
+        <button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
+    } else if (view === 'online') {
+      body.innerHTML = `
+        <label class="tfield">Seu nome<input id="tNick" maxlength="20" value="${esc(nick())}"></label>
+        <label class="tfield">Código da sala<input id="tCode" maxlength="8" placeholder="Ex.: K7QPM" style="text-transform:uppercase;letter-spacing:3px"></label>
+        <p class="note" id="tNetMsg">Peça o código a quem abriu a sala (Menu → Jogar junto → Criar sala, dentro da fazenda dele).</p>
+        <button class="tbtn primary" data-tact="join">Entrar na sala</button>
         <button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
     } else if (view === 'help') {
       body.innerHTML = `<div class="thelp">${this.tab_menu_ajuda()}</div><button class="tbtn" data-tact="view" data-view="main">Voltar</button>`;
@@ -337,7 +366,7 @@ export class UI {
       mercado: [['vender', 'Vender'], ['insumos', 'Comprar insumos'], ['animais', 'Animais'], ['noticias', 'Notícias']],
       fazenda: [['animais', 'Rebanho'], ['lavouras', 'Lavouras'], ['peoes', 'Peões'], ['diario', 'Diário']],
       tempo: [['previsao', 'Previsão'], ['calendario', 'Calendário de plantio']],
-      menu: [['jogo', 'Fazenda e saves'], ['ajuda', 'Como jogar']],
+      menu: [['jogo', 'Fazenda e saves'], ['online', 'Jogar junto'], ['ajuda', 'Como jogar']],
     }[this.panel];
     const titles = { mercado: this.atCoop ? 'Cooperativa' : 'Mercado <small>(só consulta — vá até a cooperativa para negociar)</small>', fazenda: 'Fazenda', tempo: 'Tempo e clima', menu: 'Terra Boa' };
     $('mTitle').innerHTML = titles[this.panel];
@@ -358,60 +387,29 @@ export class UI {
     body.scrollTop = scroll;
   }
 
+  // resultado de um comando (local ou vindo do anfitrião)
+  cmdResult(r) {
+    if (r?.msg) this.toast(r.msg, r.kind);
+    if (r?.close) { this.close(); return; }
+    if (this.panel) this.render();
+  }
   act(act, ds, el) {
-    const g = this.g, m = g.market;
-    if (act === 'sell') {
-      const id = ds.id, have = g.inv[id] || 0;
-      const n = ds.n === 'all' ? have : Math.min(have, +ds.n);
-      if (n <= 0) return;
-      const v = sell(m, id, n);
-      g.inv[id] -= n; g.money += v; g.stats.earned += v;
-      this.toast(`Vendeu ${n} ${ITEMS[id].unit} de ${ITEMS[id].name.toLowerCase()} por ${fmt(v)}`, 'good');
-    } else if (act === 'buyi') {
-      const inp = INPUTS.find(x => x.id === ds.id), n = +ds.n;
-      const v = inputPrice(m, inp) * n;
-      if (g.money < v) return this.toast('Dinheiro insuficiente.', 'bad');
-      g.money -= v; g.stats.spent += v; g.inv[inp.id] = (g.inv[inp.id] || 0) + n;
-      this.toast(`Comprou ${n} × ${inp.name.toLowerCase()} por ${fmt(v)}`, 'good');
-    } else if (act === 'sella') {
-      const a = g.animals.find(x => x.id === +ds.id);
-      if (!a) return;
-      const v = animalValue(g, a);
-      if (a.ridden) return this.toast('Desça do cavalo antes de vender.', 'bad');
-      sell(m, ANIMALS[a.sp].market, animalMarketQty(a));
-      g.animals = g.animals.filter(x => x !== a);
-      g.money += v; g.stats.earned += v;
-      this.toast(`Vendeu ${animalLabel(a).toLowerCase()} por ${fmt(v)}`, 'good');
-    } else if (act === 'buya') {
-      const o = ANIMAL_OFFERS[+ds.i];
-      const v = offerPrice(g, o);
-      if (g.money < v) return this.toast('Dinheiro insuficiente.', 'bad');
-      if (g.animals.filter(x => x.led).length >= MAX_LED) return this.toast(`Já está levando ${MAX_LED} animais. Solte algum antes.`, 'bad');
-      const p = g.player;
-      const a = makeAnimal(g, o.sp, Math.floor(p.x), Math.floor(p.y), { owned: false, sex: o.sex, weight: o.w });
-      a.x = p.x; a.y = p.y + 0.6; a.led = true; a.ledSeq = g.nextId++; a.owned = false; a.bought = true;
-      g.money -= v; g.stats.spent += v;
-      this.toast(`Comprou ${o.name.toLowerCase()}. Leve até o pasto e clique nele com o Laço para soltar.`, 'good');
-      this.close(); return;
-    } else if (act === 'buyt') {
-      const v = tractorPrice(g);
-      if (g.money < v) return this.toast('Dinheiro insuficiente.', 'bad');
-      const p = g.player;
-      g.vehicles.push({ id: g.nextId++, kind: 'trator', x: p.x + 1.2, y: p.y + 0.3, fx: 1 });
-      g.money -= v; g.stats.spent += v;
-      this.toast('Trator entregue ao seu lado. Chegue perto e aperte X (ou mão) para subir.', 'good');
-      this.close(); return;
-    } else if (act === 'hire') {
-      const k = hireWorker(g, ds.task || 'colher');
-      if (k) this.toast(`${k.name} foi contratado (R$ ${WAGE}/dia).`, 'good');
-    } else if (act === 'task') {
-      const k = g.workers.find(k => k.id === +ds.id);
-      if (k) { k.task = ds.task; k.path = []; k.job = null; k.timer = 0; }
-    } else if (act === 'fire') {
-      const k = g.workers.find(k => k.id === +ds.id);
-      fireWorker(g, +ds.id);
-      if (k) this.toast(`${k.name} foi dispensado.`);
-    } else if (act === 'savenow') {
+    const g = this.g;
+    if (COMMANDS.has(act)) {
+      const data = { ...ds };
+      if (this.net?.isClient) { this.net.cmd(act, data); return; }
+      return this.cmdResult(runCommand(g, act, data, g.player));
+    }
+    if (act === 'nethost' || act === 'netjoin' || act === 'netleave') {
+      const name = ($('netName')?.value || nick()).trim().slice(0, 20) || 'Fazendeiro';
+      setNick(name);
+      const code = ($('netCode')?.value || '').trim();
+      if (act === 'netjoin' && code.length < 4) return this.toast('Digite o código da sala.', 'bad');
+      this.onNet && this.onNet(act, { name, code });
+      return;
+    }
+    if (this.net?.isClient && ['savenow', 'dupnow', 'exportnow', 'renamenow'].includes(act)) return this.toast('Quem salva é o anfitrião da sala.', 'bad');
+    if (act === 'savenow') {
       const r = this.onSave ? this.onSave(true) : null;
       if (r && !r.ok) return this.toast(r.reason, 'bad');
       this.toast('Fazenda salva.', 'good');
@@ -426,6 +424,7 @@ export class UI {
       const v = document.getElementById('farmName').value.trim();
       if (v) { g.farmName = v; Saves.renameFarm(g.farmId, v); this.toast('Nome salvo.', 'good'); }
     } else if (act === 'title') {
+      if (this.net?.active) this.onNet && this.onNet('netleave', {});
       this.onSave && this.onSave(true);
       this.showTitle(); return;
     }
@@ -604,11 +603,38 @@ export class UI {
         <li><b>Pintinhos:</b> com galo no cercado, ovos deixados no chão 3 dias podem chocar. Recolha os ovos se quiser vender.</li>
         <li><b>Bichos soltos:</b> andam em manadas e têm cria. Manadas novas chegam pelas bordas do mapa, mais na primavera. Laçou uma mãe? O filhote vem atrás e fica no seu pasto.</li>
         <li><b>Longe do rio?</b> Compre um poço na cooperativa e construa: aspersores a até 12 tiles dele funcionam, e o regador enche nele.</li>
+        <li><b>Jogar junto:</b> Menu → Jogar junto → Criar sala e passe o código. Quem entra usa a tela inicial → Jogar junto. Até 4 pessoas; a fazenda, o dinheiro e o estoque são do anfitrião, e só ele salva.</li>
         <li><b>Arou no lugar errado?</b> Clique com a enxada na terra arada para desfazer.</li>
         <li><b>Noite:</b> durma na casa (mão) depois das 19h. O jogo salva sozinho todo dia.</li>
       </ul></div></div>`;
   }
+  tab_menu_online(g) {
+    const n = this.net;
+    const list = () => (n?.playerList() || []).map(p => `<div class="kv"><span><b style="color:${p.color}">●</b> ${esc(p.name)}${p.id === n.myId ? ' <em>(você)</em>' : ''}${p.id === 'host' ? ' · anfitrião' : ''}</span><b>${p.ping != null ? p.ping + ' ms' : ''}</b></div>`).join('');
+    if (n?.isHost) {
+      this.live = true;
+      return `<div class="card"><p class="note">Sala aberta. Passe o código para quem vai jogar com você:</p>
+        <p style="font-size:34px;letter-spacing:6px;text-align:center;margin:6px 0"><b>${n.code}</b></p>
+        <p class="note">Na tela inicial do Terra Boa (no celular ou outro PC), toque em <b>Jogar junto</b> e digite o código. A fazenda é sua: só você salva; dinheiro, estoque e animais são de todos.</p></div>
+        <div class="card"><b>Na fazenda (${n.playerList().length}/4)</b>${list()}</div>
+        <p><button class="btn" data-act="netleave">Fechar sala</button></p>`;
+    }
+    if (n?.isClient) {
+      this.live = true;
+      return `<div class="card"><p>Você está na fazenda <b>${esc(g.farmName || 'do anfitrião')}</b> (sala ${n.code}).</p>
+        <p class="note">Quem salva é o anfitrião. Dinheiro, estoque e animais são da fazenda dele, de todos que estão jogando.</p></div>
+        <div class="card"><b>Na fazenda</b>${list()}</div>
+        <p><button class="btn" data-act="netleave">Sair da sala</button></p>`;
+    }
+    return `<div class="card"><label class="tfield">Seu nome<input id="netName" maxlength="20" value="${esc(nick())}"></label>
+        <p style="margin-top:8px"><button class="btn primary" data-act="nethost">Criar sala nesta fazenda</button></p>
+        <p class="note">Até 4 pessoas. Funciona pela internet, direto entre os aparelhos (precisa estar no site do jogo, não no arquivo aberto do PC).</p></div>
+      <div class="card"><label class="tfield">Entrar na sala de um amigo<span style="display:flex;gap:6px"><input id="netCode" maxlength="8" placeholder="CÓDIGO" style="flex:1;text-transform:uppercase"><button class="btn" data-act="netjoin">Entrar</button></span></label>
+        <p class="note">Sua fazenda fica guardada; ao sair da sala você volta para ela.</p></div>`;
+  }
   tab_menu_jogo(g) {
+    if (this.net?.isClient) return `<div class="card"><p>Você está jogando na fazenda <b>${esc(g.farmName || 'do anfitrião')}</b>.</p><p class="note">Salvar, copiar e exportar ficam com o anfitrião. Suas fazendas continuam guardadas neste aparelho.</p></div>
+      <p><button class="btn" data-act="netleave">Sair da sala</button> <button class="btn" data-act="title">Tela inicial</button></p>`;
     return `<div class="card"><label class="tfield">Nome desta fazenda<span style="display:flex;gap:6px"><input id="farmName" maxlength="40" value="${esc(g.farmName || '')}" style="flex:1"><button class="btn" data-act="renamenow">Renomear</button></span></label>
       <div class="kv" style="margin-top:8px"><span>Semente do mapa</span><b>${g.seed}</b></div><div class="kv"><span>Dias jogados</span><b>${g.stats.days}</b></div></div>
       <p class="note" style="margin-top:10px">Esta fazenda salva sozinha a cada dia e ao fechar a página. Começar uma fazenda nova não apaga esta.</p>
@@ -653,37 +679,6 @@ function animalInfo(g, a) {
   return lines.join('<br>');
 }
 
-function tractorPrice(g) { return 2600 * Math.exp(g.market.dollar || 0); }
-const ANIMAL_OFFERS = [
-  { name: 'Bezerra (fêmea)', sp: 'gado', sex: 'f', w: 160 },
-  { name: 'Garrote (macho)', sp: 'gado', sex: 'm', w: 180 },
-  { name: 'Leitoa', sp: 'porco', sex: 'f', w: 25 },
-  { name: 'Leitão', sp: 'porco', sex: 'm', w: 25 },
-  { name: 'Franga', sp: 'galinha', sex: 'f', w: 1.3 },
-  { name: 'Galo', sp: 'galinha', sex: 'm', w: 1.8 },
-  { name: 'Égua mansa', sp: 'cavalo', sex: 'f', w: 400 },
-  { name: 'Cavalo manso', sp: 'cavalo', sex: 'm', w: 420 },
-  { name: 'Ovelha', sp: 'ovelha', sex: 'f', w: 42 },
-  { name: 'Carneiro', sp: 'ovelha', sex: 'm', w: 50 },
-  { name: 'Cabra', sp: 'cabra', sex: 'f', w: 40 },
-  { name: 'Bode', sp: 'cabra', sex: 'm', w: 45 },
-  { name: 'Pata', sp: 'pato', sex: 'f', w: 2.4 },
-  { name: 'Pato', sp: 'pato', sex: 'm', w: 3 },
-  { name: 'Perua', sp: 'peru', sex: 'f', w: 6 },
-  { name: 'Peru', sp: 'peru', sex: 'm', w: 9 },
-  { name: 'Coelha', sp: 'coelho', sex: 'f', w: 2.8 },
-  { name: 'Coelho', sp: 'coelho', sex: 'm', w: 3 },
-  { name: 'Lhama', sp: 'lhama', sex: 'f', w: 125 },
-  { name: 'Lhama macho', sp: 'lhama', sex: 'm', w: 140 },
-  { name: 'Búfala', sp: 'bufalo', sex: 'f', w: 420 },
-  { name: 'Búfalo', sp: 'bufalo', sex: 'm', w: 480 },
-];
-function offerPrice(g, o) {
-  const d = ANIMALS[o.sp], p = g.market.c[d.market].price;
-  if (d.sell === 'arroba') return o.w / 15 * p * 1.3;
-  if (d.sell === 'kg') return o.w * p * 1.5;
-  return p * 1.15;
-}
 
 // Estima o ciclo plantando hoje usando o clima médio dos próximos dias.
 function estimateCrop(d, doy) {

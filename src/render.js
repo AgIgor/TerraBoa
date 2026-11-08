@@ -4,7 +4,7 @@ import { groundSprite, wetTilled, treeSprite, bushSprite, rockSprite, cropSprite
 import { cropStage } from './sim.js';
 import { rainAt, tempAt } from './climate.js';
 import { hourOf, dayOf } from './game.js';
-import { isAdult } from './animals.js';
+import { isAdult, playerById } from './animals.js';
 import { fx, updateWind, updateFx, swayX, skew, shakeOffset, drawCloudShadows, drawParts, drawSmoke, drawRain, drawLeaves, smoke, drawHail, ember } from './fx.js';
 
 const T = TILE;
@@ -102,9 +102,12 @@ export class Renderer {
     this.view = { x0, x1, y0, y1 };
     for (const e of w.drops) if (e.x >= x0 && e.x <= x1 && e.y >= y0 && e.y <= y1) list.push([e.y + 0.3, 3, e]);
     for (const a of g.animals) if (!a.ridden && a.x > x0 - 1 && a.x < x1 + 2 && a.y > y0 - 1 && a.y < y1 + 2) list.push([a.y + 0.2, 4, a]);
-    for (const v of g.vehicles) if (!(p.mount?.kind === 'trator' && p.mount.id === v.id)) list.push([v.y + 0.3, 6, v]);
+    const others = Object.values(g.others || {});
+    const driving = new Set([p, ...others].filter(q => q.mount?.kind === 'trator').map(q => q.mount.id));
+    for (const v of g.vehicles) if (!driving.has(v.id)) list.push([v.y + 0.3, 6, v]);
     for (const k of g.workers) list.push([k.y + 0.25, 7, k]);
     list.push([p.y + 0.25, 5, p]);
+    for (const o of others) list.push([o.y + 0.25, 5, o]);
     list.sort((a, b) => a[0] - b[0]);
 
     for (const it of list) {
@@ -122,7 +125,7 @@ export class Renderer {
         }
         case 3: drawEggs(ctx, it[2]); break;
         case 4: drawAnimal(ctx, it[2], now, ui.hoverAnimal === it[2]); break;
-        case 5: drawPlayer(ctx, g, now); break;
+        case 5: drawPlayer(ctx, g, it[2], now, others.length > 0); break;
         case 6: drawTractor(ctx, it[2].x * T, it[2].y * T, it[2].fx >= 0 ? 1 : -1); break;
         case 7: drawWorker(ctx, it[2]); break;
         case 8: drawFire(ctx, w, it[2], now, dt); break;
@@ -135,6 +138,8 @@ export class Renderer {
     ctx.strokeStyle = '#d9c38a'; ctx.lineWidth = 1;
     for (const led of g.animals) {
       if (!led.led) continue;
+      const p = playerById(g, led.ledBy);
+      if (!p) continue;
       ctx.beginPath(); ctx.moveTo(p.x * T + 6, p.y * T - 12);
       ctx.quadraticCurveTo((p.x + led.x) / 2 * T, (p.y + led.y) / 2 * T + 6, led.x * T, led.y * T - 10);
       ctx.stroke();
@@ -694,9 +699,19 @@ function drawFarmer(ctx, f, pal, toolId, seated = 0, label = null) {
 }
 
 const TOOL_IDS = ['mao', 'enxada', 'machado', 'regador', 'plantar', 'construir', 'laco', 'adubo'];
-function drawPlayer(ctx, g, now) {
-  const p = g.player;
+const palCache = new Map();
+function palOf(p, multi) {
+  if (!multi || !p.color) return PAL_PLAYER;
+  if (!palCache.has(p.color)) {
+    const c = p.color, n = parseInt(c.slice(1), 16), k = 0.7;
+    const dark = '#' + [16, 8, 0].map(sh => Math.round(((n >> sh) & 255) * k).toString(16).padStart(2, '0')).join('');
+    palCache.set(c, { ...PAL_PLAYER, shirt: c, stripe: dark });
+  }
+  return palCache.get(p.color);
+}
+function drawPlayer(ctx, g, p, now, multi = false) {
   const tool = TOOL_IDS[p.tool];
+  const pal = palOf(p, multi), label = multi && p !== g.player ? p.name : null;
   if (p.mount?.kind === 'cavalo') {
     const h = g.animals.find(a => a.id === p.mount.id);
     if (h) {
@@ -704,17 +719,17 @@ function drawPlayer(ctx, g, now) {
       if (p.moving) h.step = p.step * 1.4;
       drawAnimal(ctx, h, now, false);
       const side = Math.abs(p.fx) < 0.2;
-      drawFarmer(ctx, { ...p, fx: side ? h.face : p.fx, fy: side ? 0 : p.fy }, PAL_PLAYER, tool, -13);
+      drawFarmer(ctx, { ...p, fx: side ? h.face : p.fx, fy: side ? 0 : p.fy }, pal, tool, -13, label);
       return;
     }
   }
   if (p.mount?.kind === 'trator') {
     const face = p.fx >= 0 ? 1 : -1;
     drawTractor(ctx, p.x * T, p.y * T, face);
-    drawFarmer(ctx, { ...p, x: p.x - face * 0.12, fx: face, fy: 0 }, PAL_PLAYER, tool, -11);
+    drawFarmer(ctx, { ...p, x: p.x - face * 0.12, fx: face, fy: 0 }, pal, tool, -11, label);
     return;
   }
-  drawFarmer(ctx, p, PAL_PLAYER, tool);
+  drawFarmer(ctx, p, pal, tool, 0, label);
   if (p.sneak) { ctx.font = '9px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('🤫', p.x * T, p.y * T - 36); }
 }
 function drawWorker(ctx, k) {

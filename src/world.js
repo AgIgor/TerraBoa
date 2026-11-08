@@ -289,3 +289,20 @@ export function worldFromJSON(o) {
   w.recomputeComponents();
   return w;
 }
+
+// ---- jogar junto: estado de um tile, para mandar só o que mudou ----
+const r3 = v => Math.round(v * 1000) / 1000;
+export function tileState(w, i) {
+  return [i, w.ground[i], w.obj[i], w.hp[i], r3(w.moist[i]), r3(w.grass[i]), r3(w.fert[i]),
+    w.crops.get(i) || 0, w.troughs.get(i) || 0, w.feeders.get(i) || 0, w.sprinklers.has(i) ? 1 : 0, w.fires.get(i) || 0, w.ash.has(i) ? w.ash.get(i) : -1];
+}
+export function setTileState(w, s) {
+  const [i, gr, o, hp, m, gs, f, crop, trough, feeder, spr, fire, ash] = s;
+  if (!(i >= 0 && i < w.w * w.h)) return;
+  if (w.obj[i] !== o || w.ground[i] !== gr) w.dirty = true;
+  w.ground[i] = gr; w.obj[i] = o; w.hp[i] = hp; w.moist[i] = m; w.grass[i] = gs; w.fert[i] = f;
+  const put = (map, v) => { if (v) map.set(i, v); else map.delete(i); };
+  put(w.crops, crop); put(w.troughs, trough); put(w.feeders, feeder); put(w.fires, fire);
+  if (spr) w.sprinklers.add(i); else w.sprinklers.delete(i);
+  if (ash >= 0) w.ash.set(i, ash); else w.ash.delete(i);
+}

@@ -87,10 +87,10 @@ export function sleep(g) {
 
 // ---- salvar / carregar ----
 export function serialize(g) {
-  const { rng, world, notify, onNotify, ...rest } = g;
+  const { rng, world, notify, onNotify, others, remote, ...rest } = g;
   return JSON.stringify({
     ...rest, rngState: rng.s, world: worldToJSON(world),
-    animals: g.animals.map(a => ({ ...a, path: [], led: false })),
+    animals: g.animals.map(a => ({ ...a, path: [], led: false, ledBy: null, tx: undefined, ty: undefined })),
     workers: g.workers.map(k => ({ ...k, path: [], job: null, timer: 0 })),
   });
 }
@@ -103,6 +103,7 @@ export function deserialize(json) {
   g.world = worldFromJSON(o.world);
   g.workers ||= []; g.vehicles ||= [];
   g.player.mount ||= null;
+  g.others = {};
   ensureMarket(g.market, dayOf(g));
   attach(g);
   return g;

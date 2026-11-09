@@ -12,13 +12,19 @@
 // - painel aberto não pausa o jogo dos outros;
 // - anfitrião que fica sem servidor de sinalização tenta reconectar (sala continua);
 // - mensagens de convidado são validadas (números, limites, ferramentas conhecidas).
+//
+// Desempenho: o empacotamento binário padrão do PeerJS é feito em JavaScript e custa
+// ~80x mais que JSON nativo (medido: 6 ms contra 0,08 ms para a lista de animais).
+// Por isso o canal é 'raw': cada mensagem vira texto JSON uma vez só (mesmo texto para
+// todos os convidados) e as grandes são cortadas em pedaços. Mercado, clima e diário
+// só vão quando mudam; animais completos, só os que mudaram.
 import { TOOLS, REGADOR_MAX, MAX_LED } from './config.js';
 import { serialize, deserialize } from './game.js';
 import { worldToJSON, worldFromJSON, tileState, setTileState } from './world.js';
 import { useTool, toggleMount, pickEggsAt } from './actions.js';
 import { COMMANDS, runCommand } from './commands.js';
 
-export const NET_VERSION = 2; // aumente quando o protocolo ou a simulação mudarem
+export const NET_VERSION = 3; // aumente quando o protocolo ou a simulação mudarem
 const PREFIX = 'terraboa-v1-';
 const MAX_PLAYERS = 4;
 const COLORS = ['#e8c040', '#4a9ae8', '#e8604a', '#a86ae8', '#4ac8a0', '#e88ac0'];
@@ -27,6 +33,29 @@ const TOOL_IDS = new Set(TOOLS.map(t => t.id));
 const randomCode = () => Array.from({ length: 5 }, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join('');
 const num = (v, lo, hi, def = 0) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : def);
 const r2 = v => Math.round(v * 100) / 100;
+const CHUNK = 60000;       // caracteres por pedaço (bem abaixo do limite do canal)
+const WORLD_EVERY = 3;     // mapa inteiro a cada 3 horas de jogo (ações vão na hora, por tile)
+const FAST_KEYS = new Set(['x', 'y', 'step', 'face', 'timer', 'fleeing', 'seek', 'hurry', 'path', 'tx', 'ty', 'hSum', 'tSum', 'hours']);
+
+// Texto(s) a mandar para uma mensagem
+function encode(m, seqRef) {
+  const s = JSON.stringify(m);
+  if (s.length <= CHUNK) return [s];
+  const id = ++seqRef.n, n = Math.ceil(s.length / CHUNK), out = [];
+  for (let k = 0; k < n; k++) out.push(JSON.stringify({ t: 'part', id, k, n, d: s.slice(k * CHUNK, (k + 1) * CHUNK) }));
+  return out;
+}
+// Lê o que chegou (texto, ou objeto de um anfitrião/convidado antigo); junta pedaços.
+function decode(conn, raw) {
+  let m;
+  try { m = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+  if (!m || m.t !== 'part') return m;
+  const b = conn._parts && conn._parts.id === m.id ? conn._parts : (conn._parts = { id: m.id, got: 0, d: new Array(m.n) });
+  if (b.d[m.k] == null) { b.d[m.k] = m.d; b.got++; }
+  if (b.got < m.n) return null;
+  conn._parts = null;
+  try { return JSON.parse(b.d.join('')); } catch { return null; }
+}
 
 function myPid() {
   try {
@@ -81,6 +110,10 @@ export class Net {
     this.notes = [];
     this.t = { fast: 0, full: 0, slow: 0, ping: 0 };
     this.sentHour = -1; this.lastWorld = 0;
+    this.partSeq = { n: 0 };
+    this.sig = {};            // anfitrião: o que já foi mandado (mercado, clima, diário)
+    this.animSig = new Map(); // anfitrião: id do animal -> texto do que foi mandado
+    this.animPos = new Map(); // anfitrião: id do animal -> posição/estado já mandados
   }
   get g() { return this.h.game(); }
   get active() { return !!this.role; }
@@ -131,7 +164,10 @@ export class Net {
   onGuest(conn) {
     conn.on('open', () => {
       const g = this.g, md = conn.metadata || {};
-      const refuse = reason => { try { conn.send({ t: 'reject', reason }); } catch { /* */ } setTimeout(() => { try { conn.close(); } catch { /* */ } }, 800); };
+      const refuse = reason => {
+        try { if (conn.serialization === 'raw') this.sendTo(conn, { t: 'reject', reason }); else conn.send({ t: 'reject', reason }); } catch { /* */ }
+        setTimeout(() => { try { conn.close(); } catch { /* */ } }, 800);
+      };
       if (md.v !== NET_VERSION) return refuse('Versões diferentes do Terra Boa. Atualizem a página (Ctrl+F5 no PC) nos dois aparelhos e tentem de novo.');
       const id = String(md.pid || conn.peer).replace(/[^\w-]/g, '').slice(0, 24) || conn.peer;
       if (id === 'host') return refuse('Id inválido.');
@@ -147,11 +183,12 @@ export class Net {
       p.name = String(md.name || 'Convidado').slice(0, 20);
       const e = { conn, id, last: performance.now(), ping: null };
       this.conns.set(id, e);
-      conn.on('data', m => { if (this.conns.get(id) === e) this.fromGuest(e, p, m); });
+      conn.on('data', raw => { if (this.conns.get(id) !== e) return; const m = decode(conn, raw); if (m) this.fromGuest(e, p, m); });
       const gone = () => { if (this.conns.get(id) === e) this.dropGuest(id, 'saiu'); };
       conn.on('close', gone);
       conn.on('error', gone);
-      conn.send({ t: 'welcome', v: NET_VERSION, you: id, save: serialize(g), me: pubPlayer(p), players: this.playersFull(), name: g.farmName || '' });
+      this.sendTo(conn, { t: 'welcome', v: NET_VERSION, you: id, save: serialize(g), me: pubPlayer(p), players: this.playersFull(), name: g.farmName || '' });
+      this.animSig.clear(); this.animPos.clear(); this.sig = {}; // o novo convidado recebe tudo no próximo envio
       this.note(`${p.name} entrou na fazenda.`, 'good');
       this.h.changed();
     });
@@ -205,7 +242,7 @@ export class Net {
         const tiles = [];
         if (w.inside(x, y)) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (w.inside(x + dx, y + dy)) tiles.push(tileState(w, w.idx(x + dx, y + dy)));
         this.markAround(x, y); // os outros também veem
-        e.conn.send({ t: 'res', seq: m.seq, r: r ? { msg: r.msg, kind: r.kind, slept: !!r.slept, open: r.open || null } : null, tiles, you: { water: p.water, mount: p.mount, x: p.x, y: p.y }, drops: w.drops, inv: g.inv, money: g.money });
+        this.sendTo(e.conn, { t: 'res', seq: m.seq, r: r ? { msg: r.msg, kind: r.kind, slept: !!r.slept, open: r.open || null } : null, tiles, you: { water: p.water, mount: p.mount, x: p.x, y: p.y }, drops: w.drops, inv: g.inv, money: g.money });
         break;
       }
       case 'cmd': {
@@ -213,12 +250,12 @@ export class Net {
         const ds = {};
         for (const k of ['id', 'n', 'i', 'task', 'dest']) if (m.ds && m.ds[k] != null) ds[k] = String(m.ds[k]).slice(0, 30);
         const r = this.runAs(p, () => runCommand(g, m.act, ds, p));
-        e.conn.send({ t: 'cres', r, inv: g.inv, money: g.money });
-        this.t.full = 99; // animal comprado/vendido aparece logo para todos
+        this.sendTo(e.conn, { t: 'cres', r, inv: g.inv, money: g.money });
+        this.t.full = 99; this.t.slow = 99; // animal comprado/vendido e preço novo aparecem logo
         break;
       }
       case 'speed': this.h.speed(num(m.s, 0, 3, 1) | 0); break;
-      case 'ping': e.conn.send({ t: 'pong', at: m.at }); break;
+      case 'ping': this.sendTo(e.conn, { t: 'pong', at: m.at }); break;
       case 'pong': e.ping = Math.round(performance.now() - m.at); break;
     }
   }
@@ -236,7 +273,16 @@ export class Net {
   // notificações da simulação (morte, fogo, cria...) chegam para todos
   relay(text, kind) { if (this.isHost && this.conns.size) this.notes.push([text, kind]); }
 
-  broadcast(m) { for (const e of this.conns.values()) if (e.conn.open) { try { e.conn.send(m); } catch { /* */ } } }
+  sendTo(conn, m) {
+    if (!conn?.open) return;
+    try { for (const s of encode(m, this.partSeq)) conn.send(s); } catch { /* canal fechando */ }
+  }
+  // um texto só para todos (não empacota de novo para cada convidado)
+  broadcast(m) {
+    if (!this.conns.size) return;
+    const out = encode(m, this.partSeq);
+    for (const e of this.conns.values()) if (e.conn.open) { try { for (const s of out) e.conn.send(s); } catch { /* */ } }
+  }
   sendWorld() {
     this.lastWorld = performance.now();
     if (this.conns.size) this.broadcast({ t: 'world', w: worldToJSON(this.g.world) });
@@ -248,7 +294,7 @@ export class Net {
     this.leave(true);
     code = String(code).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     try { await this.open(); } catch (e) { throw new Error(errText(e)); }
-    const conn = this.peer.connect(PREFIX + code, { reliable: true, metadata: { name, pid: myPid(), v: NET_VERSION } });
+    const conn = this.peer.connect(PREFIX + code, { reliable: true, serialization: 'raw', metadata: { name, pid: myPid(), v: NET_VERSION } });
     this.role = 'client'; this.code = code; this.hostConn = conn;
     try {
       await new Promise((resolve, reject) => {
@@ -256,7 +302,7 @@ export class Net {
         this.welcomeWait = { resolve: () => { clearTimeout(timer); resolve(); }, reject: e => { clearTimeout(timer); reject(e); } };
         conn.on('error', e => this.welcomeWait?.reject(new Error(errText(e))));
         this.peer.on('error', e => this.welcomeWait?.reject(new Error(errText(e))));
-        conn.on('data', m => this.fromHost(m));
+        conn.on('data', raw => { const m = decode(conn, raw); if (m) this.fromHost(m); });
       });
     } catch (e) {
       this.welcomeWait = null;
@@ -310,16 +356,14 @@ export class Net {
         for (const id of Object.keys(g.others)) if (!seen.has(id)) { delete g.others[id]; this.h.changed(); }
         // animais: posição e estado de laço/montaria
         const byId = new Map(g.animals.map(a => [a.id, a]));
-        const keep = new Set();
         for (const [id, x, y, face, fl, ledBy, ridBy] of m.an) {
-          keep.add(id);
           const a = byId.get(id);
           if (!a) { this.needFull = true; continue; }
           a.tx = x; a.ty = y; a.face = face;
           a.ridden = !!(fl & 1); a.led = !!(fl & 2); a.owned = !!(fl & 4);
           a.ledBy = ledBy || null; a.riddenBy = ridBy || null;
         }
-        if (g.animals.length !== keep.size) g.animals = g.animals.filter(a => keep.has(a.id));
+        if (m.gone) { const gone = new Set(m.gone); g.animals = g.animals.filter(a => !gone.has(a.id)); }
         // peões e veículos
         const wk = new Map(g.workers.map(k => [k.id, k]));
         g.workers = m.wk.map(s => { const k = wk.get(s.id); if (k) { const { x, y, ...rest } = s; Object.assign(k, rest); k.tx = x; k.ty = y; return k; } return { ...s, tx: s.x, ty: s.y, path: [] }; });
@@ -330,17 +374,18 @@ export class Net {
         return;
       }
       case 'full': {
+        // só os animais que mudaram (os que sumiram saem pelo 'st')
         const byId = new Map(g.animals.map(a => [a.id, a]));
-        g.animals = m.animals.map(s => {
+        for (const s of m.animals) {
           const a = byId.get(s.id);
-          if (a) { const { x, y, ...rest } = s; Object.assign(a, rest); a.tx = x; a.ty = y; return a; }
-          return { ...s, path: [], tx: s.x, ty: s.y };
-        });
+          if (a) { const { x, y, ...rest } = s; Object.assign(a, rest); if (x != null) { a.tx = x; a.ty = y; } }
+          else g.animals.push({ ...s, path: [], tx: s.x, ty: s.y });
+        }
         this.needFull = false;
         return;
       }
       case 'slow':
-        g.climate = m.climate; g.market = m.market; g.flags = m.flags; g.stats = m.stats; g.log = m.log; g.nextId = m.nextId;
+        for (const k of ['climate', 'market', 'flags', 'stats', 'log', 'nextId']) if (m[k] !== undefined) g[k] = m[k];
         if (m.name) g.farmName = m.name;
         return;
       case 'world': {
@@ -368,7 +413,7 @@ export class Net {
         this.h.cmdResult(m.r);
         return;
       case 'note': this.h.toast(m.text, m.kind); return;
-      case 'ping': this.hostConn?.send({ t: 'pong', at: m.at }); return;
+      case 'ping': this.send({ t: 'pong', at: m.at }); return;
       case 'bye': this.hostLost('O anfitrião fechou a sala.'); return;
     }
   }
@@ -379,7 +424,7 @@ export class Net {
     if (w.dirty) w.recomputeComponents();
   }
 
-  send(m) { if (this.hostConn?.open) { try { this.hostConn.send(m); } catch { /* */ } } }
+  send(m) { this.sendTo(this.hostConn, m); }
   act(kind, data, req = null) {
     const seq = ++this.seq;
     if (req) this.pending.set(seq, req);
@@ -440,15 +485,33 @@ export class Net {
     }
     // anfitrião
     if (!this.conns.size) { this.dirty.clear(); this.notes = []; return; }
-    const hour = Math.floor(g.time / 60);
-    if (hour !== this.sentHour && now - this.lastWorld > 2500) { this.sentHour = hour; this.sendWorld(); }
+    const block = Math.floor(g.time / 60 / WORLD_EVERY);
+    if (block !== this.sentHour && now - this.lastWorld > 5000) { this.sentHour = block; this.sendWorld(); }
     if (this.t.full >= 1.5) {
       this.t.full = 0;
-      this.broadcast({ t: 'full', animals: g.animals.map(pubAnimal) });
+      // só os animais cujo estado (fora posição) mudou desde o último envio
+      const changed = [];
+      const alive = new Set();
+      for (const a of g.animals) {
+        alive.add(a.id);
+        const o = {};
+        for (const k in a) if (!FAST_KEYS.has(k)) o[k] = typeof a[k] === 'number' ? Math.round(a[k] * 1000) / 1000 : a[k];
+        const sig = JSON.stringify(o);
+        if (this.animSig.get(a.id) !== sig) { this.animSig.set(a.id, sig); o.x = r2(a.x); o.y = r2(a.y); changed.push(o); }
+      }
+      for (const id of this.animSig.keys()) if (!alive.has(id)) this.animSig.delete(id);
+      if (changed.length) this.broadcast({ t: 'full', animals: changed });
     }
     if (this.t.slow >= 2) {
       this.t.slow = 0;
-      this.broadcast({ t: 'slow', climate: g.climate, market: g.market, flags: g.flags, stats: g.stats, log: g.log.slice(0, 30), nextId: g.nextId, name: g.farmName || '' });
+      const out = { t: 'slow', flags: g.flags, stats: g.stats, nextId: g.nextId, name: g.farmName || '' };
+      const mk = Object.values(g.market.c).map(c => c.price.toFixed(3)).join() + '|' + (g.market.news?.length || 0) + '|' + (g.market.dollar || 0).toFixed(4);
+      if (mk !== this.sig.market) { this.sig.market = mk; out.market = g.market; }
+      const cl = JSON.stringify(g.climate.days[0]) + g.climate.days.length + (g.climate.dryStreak || 0);
+      if (cl !== this.sig.climate) { this.sig.climate = cl; out.climate = g.climate; }
+      const lg = g.log.length + '|' + (g.log[0]?.t ?? '') + (g.log[0]?.text ?? '');
+      if (lg !== this.sig.log) { this.sig.log = lg; out.log = g.log.slice(0, 30); }
+      this.broadcast(out);
     }
     if (this.t.fast >= 0.1) {
       this.t.fast = 0;
@@ -460,10 +523,24 @@ export class Net {
       this.broadcast({
         t: 'st', time: g.time, speed: g.speed, paused: g.paused, money: g.money, inv: g.inv, drops: w.drops, tiles, notes,
         pl: this.playersFull(),
-        an: g.animals.map(a => [a.id, r2(a.x), r2(a.y), a.face, (a.ridden ? 1 : 0) | (a.led ? 2 : 0) | (a.owned ? 4 : 0), a.ledBy || 0, a.riddenBy || 0]),
+        ...this.animalDelta(g),
         wk: g.workers.map(pubWorker), vh: g.vehicles,
       });
     }
+  }
+
+  // só os animais que andaram ou mudaram de laço/montaria, e os que sumiram
+  animalDelta(g) {
+    const an = [], seen = new Set();
+    for (const a of g.animals) {
+      seen.add(a.id);
+      const e = [a.id, r2(a.x), r2(a.y), a.face, (a.ridden ? 1 : 0) | (a.led ? 2 : 0) | (a.owned ? 4 : 0), a.ledBy || 0, a.riddenBy || 0];
+      const key = e.join();
+      if (this.animPos.get(a.id) !== key) { this.animPos.set(a.id, key); an.push(e); }
+    }
+    const gone = [];
+    for (const id of this.animPos.keys()) if (!seen.has(id)) { this.animPos.delete(id); gone.push(id); }
+    return gone.length ? { an, gone } : { an };
   }
 
   leave(silent) {
@@ -479,6 +556,7 @@ export class Net {
     clearInterval(this.beat);
     const peer = this.peer;
     this.peer = null; this.hostConn = null; this.conns.clear(); this.pending.clear(); this.dirty.clear(); this.notes = [];
+    this.animSig.clear(); this.animPos.clear(); this.sig = {};
     this.role = null; this.code = ''; this.myId = 'host';
     if (peer) setTimeout(() => { try { peer.destroy(); } catch { /* já fechado */ } }, 300); // deixa o 'bye' sair
     if (!silent) this.h.changed();

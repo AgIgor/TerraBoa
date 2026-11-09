@@ -22,7 +22,7 @@ const queue = [];
 const flush = () => { while (queue.length) queue.shift()(); };
 class Conn extends Emitter {
   constructor(peer, metadata) { super(); this.peer = peer; this.metadata = metadata; this.open = false; }
-  send(m) { const o = this.other, data = JSON.parse(JSON.stringify(m)); if (this.open && !this.dead) queue.push(() => { if (!o.dead) o.emit('data', data); }); }
+  send(m) { if (typeof m === 'string') { globalThis.SENT = (globalThis.SENT || 0) + m.length; const t = (m.match(/^\{"t":"(\w+)"/) || [])[1]; (globalThis.BYT ||= {})[t] = ((globalThis.BYT[t]) || 0) + m.length; } const o = this.other, data = JSON.parse(JSON.stringify(m)); if (this.open && !this.dead) queue.push(() => { if (!o.dead) o.emit('data', data); }); }
   close() { if (this.dead) return; this.dead = true; this.open = false; const o = this.other; queue.push(() => { o.dead = true; o.open = false; o.emit('close'); this.emit('close'); }); }
 }
 let auto = 0;
@@ -32,7 +32,7 @@ class Peer extends Emitter {
     const a = new Conn(id, opts.metadata), host = peers.get(id);
     queue.push(() => {
       if (!host) { this.emit('error', { type: 'peer-unavailable' }); return; }
-      const b = new Conn(this.id, opts.metadata); a.other = b; b.other = a;
+      const b = new Conn(this.id, opts.metadata); a.other = b; b.other = a; a.serialization = b.serialization = opts.serialization || 'binary';
       host.emit('connection', b);
       a.open = b.open = true; b.emit('open'); a.emit('open');
     });
@@ -170,6 +170,28 @@ console.log('# sala cheia');
   check(extra.some(s => /cheia/.test(s.err || '')), 'quem passou do limite recebeu aviso');
   for (const s of extra) if (s.net.isClient) { s.net.leave(true); }
   tick([host], 0.5);
+}
+
+
+console.log('# tráfego e animais sincronizados só com o que mudou');
+{
+  const g2 = globalThis.G2;
+  tick([host, g2], 3);
+  globalThis.SENT = 0; globalThis.BYT = {};
+  tick([host, g2], 10);
+  const kbs = globalThis.SENT / 1024 / 10 / host.net.conns.size; // por convidado
+  console.log(`  ${kbs.toFixed(1)} KB/s com 1 convidado e ${host.g.animals.length} animais`, JSON.stringify(Object.fromEntries(Object.entries(globalThis.BYT).map(([k, v]) => [k, (v / 10240).toFixed(1)]))));
+  check(kbs < 30, 'tráfego enxuto');
+  const cow = host.g.animals.find(a => a.owned) || host.g.animals[0];
+  cow.weight += 7; cow.health = 0.55;
+  tick([host, g2], 2);
+  const gc = g2.g.animals.find(a => a.id === cow.id);
+  check(gc && Math.abs(gc.weight - cow.weight) < 0.01 && Math.abs(gc.health - 0.55) < 0.001, 'mudança num animal chegou ao convidado');
+  check(g2.g.animals.length === host.g.animals.length, 'mesma quantidade de animais');
+  const m0 = JSON.stringify(g2.g.market.c.milho.price);
+  host.g.market.c.milho.price *= 1.1;
+  tick([host, g2], 2.5);
+  check(JSON.stringify(g2.g.market.c.milho.price) !== m0, 'preço novo chegou ao convidado');
 }
 
 console.log('# anfitrião fecha a sala');
